@@ -55,6 +55,7 @@ class Settings:
     command_whisper_model: str = "auto"
     vad_aggressiveness: int = 2
     adaptive_path: Path = Path.home() / ".scorpion" / "adaptive.json"
+    long_term_memory_path: Path = Path.home() / ".scorpion" / "long_term_memory.json"
     github_repo: str = ""
 
     @classmethod
@@ -86,5 +87,11 @@ class Settings:
             command_whisper_model=os.getenv("SCORPION_COMMAND_WHISPER_MODEL", "auto"),
             vad_aggressiveness=int(os.getenv("SCORPION_VAD_AGGRESSIVENESS", "2")),
             adaptive_path=Path(os.getenv("SCORPION_ADAPTIVE_PATH", str(Path.home() / ".scorpion" / "adaptive.json"))),
+            long_term_memory_path=Path(
+                os.getenv(
+                    "SCORPION_LONG_TERM_MEMORY_PATH",
+                    str(Path.home() / ".scorpion" / "long_term_memory.json"),
+                )
+            ),
             github_repo=os.getenv("SCORPION_GITHUB_REPO", "").strip(),
         )
