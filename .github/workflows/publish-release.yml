@@ -18,6 +18,16 @@ jobs:
         id: vars
         shell: bash
         run: echo "tag=$(cat release/current.txt)" >> "$GITHUB_OUTPUT"
+      - name: Rebuild release assets from repository payload
+        env:
+          TAG: ${{ steps.vars.outputs.tag }}
+        shell: bash
+        run: |
+          mkdir -p "release/$TAG/build"
+          cat "release/$TAG/payload/update."*.b64 | base64 -d > "release/$TAG/build/SCORPION_update.zip"
+          cat "release/$TAG/payload/full."*.b64 | base64 -d > "release/$TAG/build/SCORPION_MkIII.zip"
+          base64 -d "release/$TAG/manifest.sig.b64" > "release/$TAG/build/manifest.sig"
+          cp "release/$TAG/manifest.json" "release/$TAG/build/manifest.json"
       - name: Create signed GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -29,9 +39,9 @@ jobs:
             exit 0
           fi
           gh release create "$TAG" \
-            "release/$TAG/manifest.json#manifest.json" \
-            "release/$TAG/manifest.sig#manifest.sig" \
-            "release/$TAG/SCORPION_update.zip#SCORPION_update.zip" \
-            "release/$TAG/SCORPION_MkIII.zip#SCORPION_MkIII.zip" \
+            "release/$TAG/build/manifest.json#manifest.json" \
+            "release/$TAG/build/manifest.sig#manifest.sig" \
+            "release/$TAG/build/SCORPION_update.zip#SCORPION_update.zip" \
+            "release/$TAG/build/SCORPION_MkIII.zip#SCORPION_MkIII.zip" \
             --title "Scorpion Mk III $TAG" \
             --notes-file "release/$TAG/RELEASE_NOTES.md"
