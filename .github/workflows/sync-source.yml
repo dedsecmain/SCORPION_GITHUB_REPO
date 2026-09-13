@@ -1,0 +1,43 @@
+name: Sync Scorpion Source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .source-sync-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract source tree
+        shell: bash
+        run: |
+          rm -rf app .sync-tmp
+          mkdir -p .sync-tmp app
+          unzip -q SCORPION_MkIII.zip -d .sync-tmp
+          rsync -a \
+            --exclude='.env' \
+            --exclude='.venv' \
+            --exclude='__pycache__' \
+            --exclude='.git' \
+            --exclude='*PRIVATE*' \
+            --exclude='*SIGNING_KEY*' \
+            .sync-tmp/SCORPION_MkIII/ app/
+          rm -rf .sync-tmp
+      - name: Commit extracted source
+        shell: bash
+        run: |
+          git config user.name 'scorpion-release-bot'
+          git config user.email 'scorpion-release-bot@users.noreply.github.com'
+          git add app
+          if git diff --cached --quiet; then
+            echo 'Source tree already up to date.'
+            exit 0
+          fi
+          git commit -m 'source: publish Scorpion Mk III project tree'
+          git push
