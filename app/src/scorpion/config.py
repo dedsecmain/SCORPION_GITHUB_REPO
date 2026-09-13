@@ -44,7 +44,7 @@ class Settings:
     local_model: str = ""
     ollama_url: str = "http://127.0.0.1:11434"
     whisper_model: str = "base"
-    natural_voice: str = "de-CH-LeniNeural"
+    natural_voice: str = "de-DE-KatjaNeural"
     natural_voice_rate: str = "-4%"
     natural_voice_pitch: str = "+0Hz"
     natural_voice_enabled: bool = True
@@ -75,7 +75,7 @@ class Settings:
             local_model=os.getenv("SCORPION_LOCAL_MODEL", "").strip(),
             ollama_url=os.getenv("SCORPION_OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/"),
             whisper_model=os.getenv("SCORPION_WHISPER_MODEL", "base"),
-            natural_voice=os.getenv("SCORPION_NATURAL_VOICE", "de-CH-LeniNeural"),
+            natural_voice=os.getenv("SCORPION_NATURAL_VOICE", "de-DE-KatjaNeural"),
             natural_voice_rate=os.getenv("SCORPION_NATURAL_VOICE_RATE", "-4%"),
             natural_voice_pitch=os.getenv("SCORPION_NATURAL_VOICE_PITCH", "+0Hz"),
             natural_voice_enabled=_env_bool("SCORPION_NATURAL_VOICE_ENABLED", True),
