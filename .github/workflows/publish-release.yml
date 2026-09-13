@@ -1,0 +1,37 @@
+name: Publish Scorpion Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .release-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read release tag
+        id: vars
+        shell: bash
+        run: echo "tag=$(cat release/current.txt)" >> "$GITHUB_OUTPUT"
+      - name: Create signed GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.vars.outputs.tag }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists."
+            exit 0
+          fi
+          gh release create "$TAG" \
+            "release/$TAG/manifest.json#manifest.json" \
+            "release/$TAG/manifest.sig#manifest.sig" \
+            "release/$TAG/SCORPION_update.zip#SCORPION_update.zip" \
+            "release/$TAG/SCORPION_MkIII.zip#SCORPION_MkIII.zip" \
+            --title "Scorpion Mk III $TAG" \
+            --notes-file "release/$TAG/RELEASE_NOTES.md"
