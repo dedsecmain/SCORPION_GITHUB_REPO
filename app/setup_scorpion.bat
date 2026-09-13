@@ -1,0 +1,80 @@
+@echo off
+setlocal
+cd /d %~dp0
+
+echo ==========================================
+echo SCORPION Mk III - Adaptive Core Setup
+echo ==========================================
+echo.
+
+if not "%CD:~180,1%"=="" (
+  echo [WARNUNG] Der Installationspfad ist sehr lang.
+  echo Verschiebe den Ordner am besten nach C:\Scorpion
+  echo Lange OneDrive-/Schulpfade koennen Python-Pakete brechen.
+  echo.
+)
+
+where py >nul 2>nul
+if %errorlevel%==0 (
+  set PY=py -3
+) else (
+  set PY=python
+)
+
+if not exist .venv\Scripts\python.exe (
+  echo [1/4] Erstelle Python-Umgebung...
+  %PY% -m venv .venv || goto :error
+) else (
+  echo [1/4] Python-Umgebung existiert bereits.
+)
+
+call .venv\Scripts\activate.bat || goto :error
+
+echo [2/4] Aktualisiere pip...
+python -m pip install --upgrade pip || goto :error
+
+echo [3/4] Installiere Scorpion-Abhaengigkeiten...
+python -m pip install -r requirements.txt || goto :error
+
+if not exist .env copy .env.example .env
+
+echo [4/4] Basis-Setup abgeschlossen.
+echo.
+echo ==========================================
+echo SCORPION Mk III Setup fertig.
+echo ==========================================
+echo Standardmodus: LOCAL - kein OpenAI API-Key noetig.
+echo OPENAI_API_KEY ist optional und wird nur fuer einzeln bestaetigte Cloud-Anfragen benutzt.
+echo.
+echo Fuer lokale KI brauchst du Ollama separat.
+echo Scorpion waehlt bei leerem SCORPION_LOCAL_MODEL automatisch ein Hardware-Profil.
+echo Installierte Modelle werden bevorzugt. Modell-Downloads passieren nie ohne deine Bestaetigung.
+echo Gute Startmodelle sind:
+echo   ollama pull gemma3:4b
+echo   ollama pull qwen3:8b
+echo.
+echo Der Wake-Listener nutzt lokale Whisper-Modelle und VAD.
+echo Beim ersten Einsatz koennen Whisper-Modelle lokal heruntergeladen werden.
+echo Das verbraucht keine OpenAI-API-Credits.
+echo.
+echo Updates via GitHub Releases bleiben deaktiviert, solange SCORPION_GITHUB_REPO leer ist.
+echo Kein Update wird ohne deine Bestaetigung installiert.
+echo.
+echo Danach run_scorpion.bat starten.
+goto :done
+
+:error
+echo.
+echo ==========================================
+echo SETUP FEHLGESCHLAGEN.
+echo ==========================================
+echo Scorpion meldet absichtlich NICHT "fertig".
+echo Pruefe die Fehlermeldung oben. Bei sehr langem Pfad: nach C:\Scorpion verschieben,
+echo den Ordner .venv loeschen und setup_scorpion.bat erneut starten.
+echo.
+pause
+exit /b 1
+
+:done
+pause
+exit /b 0
