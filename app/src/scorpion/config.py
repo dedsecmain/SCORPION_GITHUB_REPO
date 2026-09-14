@@ -58,6 +58,7 @@ class Settings:
     long_term_memory_path: Path = Path.home() / ".scorpion" / "long_term_memory.json"
     drive_sync_enabled: bool = False
     drive_folder: str = "ScorpionMemory"
+    app_trust_path: Path = Path.home() / ".scorpion" / "app_trust.json"
     github_repo: str = ""
 
     @classmethod
@@ -97,5 +98,11 @@ class Settings:
             ),
             drive_sync_enabled=_env_bool("SCORPION_DRIVE_SYNC_ENABLED", False),
             drive_folder=os.getenv("SCORPION_DRIVE_FOLDER", "ScorpionMemory").strip() or "ScorpionMemory",
+            app_trust_path=Path(
+                os.getenv(
+                    "SCORPION_APP_TRUST_PATH",
+                    str(Path.home() / ".scorpion" / "app_trust.json"),
+                )
+            ),
             github_repo=os.getenv("SCORPION_GITHUB_REPO", "").strip(),
         )
