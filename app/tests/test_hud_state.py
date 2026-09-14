@@ -21,3 +21,12 @@ def test_system_model_carries_hardware_and_model_labels():
     model = SystemPanelModel(text_model="qwen3:8b", vision_model="gemma3:12b", hardware_label="24 GB RAM · 8 GB VRAM")
     assert "qwen3:8b" in model.text_model
     assert "gemma3:12b" in model.vision_model
+
+
+def test_system_model_carries_local_screen_context_status():
+    model = SystemPanelModel(
+        active_app_label="notepad.exe",
+        screen_context_label="LOCAL CONTEXT ACTIVE",
+    )
+    assert model.active_app_label == "notepad.exe"
+    assert model.screen_context_label == "LOCAL CONTEXT ACTIVE"
