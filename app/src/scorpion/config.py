@@ -59,6 +59,8 @@ class Settings:
     drive_sync_enabled: bool = False
     drive_folder: str = "ScorpionMemory"
     app_trust_path: Path = Path.home() / ".scorpion" / "app_trust.json"
+    screen_context_enabled: bool = True
+    screen_context_interval_ms: int = 1000
     github_repo: str = ""
 
     @classmethod
@@ -103,6 +105,11 @@ class Settings:
                     "SCORPION_APP_TRUST_PATH",
                     str(Path.home() / ".scorpion" / "app_trust.json"),
                 )
+            ),
+            screen_context_enabled=_env_bool("SCORPION_SCREEN_CONTEXT_ENABLED", True),
+            screen_context_interval_ms=max(
+                100,
+                int(os.getenv("SCORPION_SCREEN_CONTEXT_INTERVAL_MS", "1000")),
             ),
             github_repo=os.getenv("SCORPION_GITHUB_REPO", "").strip(),
         )
