@@ -94,14 +94,27 @@ class AdaptiveStore:
             self._save()
         return True
 
-    def record_model_metric(self, model: str, *, latency_s: float | None = None, success: bool = True) -> None:
+    def record_model_performance(self, model: str, *, latency_ms: float, success: bool) -> None:
         metrics = dict(self._data.get("model_metrics", {}))
-        item = dict(metrics.get(model, {"runs": 0, "failures": 0, "latency_total": 0.0}))
-        item["runs"] = int(item.get("runs", 0)) + 1
-        if not success:
-            item["failures"] = int(item.get("failures", 0)) + 1
-        if latency_s is not None:
-            item["latency_total"] = float(item.get("latency_total", 0.0)) + max(0.0, float(latency_s))
-        metrics[model] = item
+        item = dict(metrics.get(model, {}))
+        calls = int(item.get("calls", 0)) + 1
+        successes = int(item.get("successes", 0)) + (1 if success else 0)
+        failures = int(item.get("failures", 0)) + (0 if success else 1)
+        latency = max(0.0, float(latency_ms))
+        previous = float(item.get("ema_latency_ms", latency))
+        ema = latency if calls == 1 else (0.3 * latency + 0.7 * previous)
+        metrics[model] = {
+            "calls": calls,
+            "successes": successes,
+            "failures": failures,
+            "ema_latency_ms": round(ema, 3),
+        }
         self._data["model_metrics"] = metrics
         self._save()
+
+    def record_model_metric(self, model: str, *, latency_s: float | None = None, success: bool = True) -> None:
+        self.record_model_performance(
+            model,
+            latency_ms=max(0.0, float(latency_s or 0.0)) * 1000.0,
+            success=success,
+        )
