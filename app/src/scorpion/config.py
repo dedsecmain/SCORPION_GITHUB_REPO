@@ -56,6 +56,8 @@ class Settings:
     vad_aggressiveness: int = 2
     adaptive_path: Path = Path.home() / ".scorpion" / "adaptive.json"
     long_term_memory_path: Path = Path.home() / ".scorpion" / "long_term_memory.json"
+    drive_sync_enabled: bool = False
+    drive_folder: str = "ScorpionMemory"
     github_repo: str = ""
 
     @classmethod
@@ -93,5 +95,7 @@ class Settings:
                     str(Path.home() / ".scorpion" / "long_term_memory.json"),
                 )
             ),
+            drive_sync_enabled=_env_bool("SCORPION_DRIVE_SYNC_ENABLED", False),
+            drive_folder=os.getenv("SCORPION_DRIVE_FOLDER", "ScorpionMemory").strip() or "ScorpionMemory",
             github_repo=os.getenv("SCORPION_GITHUB_REPO", "").strip(),
         )
