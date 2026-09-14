@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import threading
 from collections.abc import Callable
 
@@ -8,6 +9,10 @@ from .wake_matcher import WakeMatcher
 
 
 ACK_TEXT = "Ja, Herr Rodriguez."
+
+
+def _speech_tokens(text: str) -> set[str]:
+    return set(re.findall(r"[a-zA-ZäöüÄÖÜß0-9]+", text.lower()))
 
 
 class ContinuousWakeListener:
@@ -38,6 +43,10 @@ class ContinuousWakeListener:
         self.session = VoiceSession(wait_seconds=self.wait_seconds)
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._assistant_speech_text = ""
+        register = getattr(self.audio, "set_barge_in_listener", None)
+        if callable(register):
+            register(self)
 
     @property
     def running(self) -> bool:
@@ -72,11 +81,62 @@ class ContinuousWakeListener:
     def _acknowledge(self, has_trailing_command: bool) -> None:
         self.session.acknowledge_wake(has_trailing_command)
         self._emit_state()
-        self.audio.speak(ACK_TEXT)
+        try:
+            self.audio.speak(ACK_TEXT, allow_barge_in=False)
+        except TypeError:
+            self.audio.speak(ACK_TEXT)
         self.session.mark_ack_finished()
         self._emit_state()
 
+    def begin_assistant_speech(self, text: str) -> None:
+        self._assistant_speech_text = text.strip()
+        self.session.begin_speaking()
+        self._emit_state()
+
+    def end_assistant_speech(self) -> None:
+        self._assistant_speech_text = ""
+        if self.session.state is VoiceState.SPEAKING:
+            self.session.speech_finished()
+            self._emit_state()
+
+    def _looks_like_assistant_echo(self, transcript: str) -> bool:
+        heard = _speech_tokens(transcript)
+        spoken = _speech_tokens(self._assistant_speech_text)
+        if not heard or not spoken:
+            return False
+        overlap = len(heard & spoken) / max(1, len(heard))
+        return overlap >= 0.75
+
+    def interrupt_speaking(self) -> bool:
+        if self.session.state is not VoiceState.SPEAKING:
+            return False
+        stopper = getattr(self.audio, "stop", None)
+        if callable(stopper):
+            stopper()
+        self.session.user_started_speaking()
+        self._emit_state()
+        return True
+
+    def _handle_speaking_transcript(self, transcript: str) -> bool:
+        transcript = transcript.strip()
+        if not transcript:
+            return False
+        if self._looks_like_assistant_echo(transcript):
+            return True
+        if not self.interrupt_speaking():
+            return False
+        self.session.command_received(transcript)
+        self._emit_state()
+        self.on_command(transcript, transcript)
+        self.session.reset()
+        self._assistant_speech_text = ""
+        self._emit_state()
+        return True
+
     def _handle_transcript(self, transcript: str) -> bool:
+        if self.session.state is VoiceState.SPEAKING:
+            return self._handle_speaking_transcript(transcript)
+
         match = self.matcher.match(transcript)
         if match is None:
             return False
@@ -144,7 +204,11 @@ class ContinuousWakeListener:
                     path = self.audio.record_wav(self.chunk_seconds)
                     if self._stop.is_set():
                         break
-                transcript = self._transcribe_wake(path)
+
+                if self.session.state is VoiceState.SPEAKING:
+                    transcript = self._transcribe_command(path)
+                else:
+                    transcript = self._transcribe_wake(path)
                 if transcript:
                     self._handle_transcript(transcript)
                 self._stop.wait(0.03)

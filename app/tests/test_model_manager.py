@@ -20,6 +20,15 @@ def test_performance_prefers_larger_models_when_installed():
     assert pick.vision_model == "gemma3:12b"
 
 
+def test_vision_role_never_selects_text_only_models():
+    manager = ModelManager()
+    candidates = manager.role_candidates("vision", profile="performance")
+    assert "gemma3:12b" in candidates
+    assert "gemma3:4b" in candidates
+    assert "qwen3:14b" not in candidates
+    assert "qwen3:8b" not in candidates
+
+
 def test_model_download_requires_confirmation():
     calls = []
     manager = ModelManager(runner=lambda args: calls.append(args) or 0)
