@@ -34,32 +34,92 @@ jobs:
       - name: Run tests
         shell: pwsh
         run: python -m pytest -q
+      - name: Self-check
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH = (Resolve-Path src)
+          python -m scorpion.selfcheck
 
   publish:
     needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Read release tag
         id: vars
         shell: bash
         run: echo "tag=$(cat release/current.txt)" >> "$GITHUB_OUTPUT"
-      - name: Rebuild release assets from repository payload
+      - name: Rebuild release assets from signed repository payload
         env:
           TAG: ${{ steps.vars.outputs.tag }}
         shell: bash
         run: |
+          set -euo pipefail
+          test "$TAG" = "v22.0.0"
+          test -f "release/$TAG/manifest.json"
+          test -f "release/$TAG/manifest.sig.b64"
+          test -f "release/$TAG/RELEASE_NOTES.md"
+          compgen -G "release/$TAG/payload/update.*.b64" >/dev/null
+          compgen -G "release/$TAG/payload/full.*.b64" >/dev/null
           mkdir -p "release/$TAG/build"
           cat "release/$TAG/payload/update."*.b64 | base64 -d > "release/$TAG/build/SCORPION_update.zip"
-          cat "release/$TAG/payload/full."*.b64 | base64 -d > "release/$TAG/build/SCORPION_MkIII.zip"
+          cat "release/$TAG/payload/full."*.b64 | base64 -d > "release/$TAG/build/SCORPION_MK22.zip"
           base64 -d "release/$TAG/manifest.sig.b64" > "release/$TAG/build/manifest.sig"
           cp "release/$TAG/manifest.json" "release/$TAG/build/manifest.json"
+      - name: Verify signature, version and package hashes
+        env:
+          TAG: ${{ steps.vars.outputs.tag }}
+        shell: bash
+        run: |
+          python -m pip install --quiet cryptography
+          python - <<'PY'
+          import base64, hashlib, json, zipfile
+          from pathlib import Path
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+          tag = Path("release/current.txt").read_text(encoding="utf-8").strip()
+          root = Path("release") / tag
+          build = root / "build"
+          manifest_bytes = (build / "manifest.json").read_bytes()
+          manifest = json.loads(manifest_bytes.decode("utf-8"))
+          if manifest.get("version") != tag or tag != "v22.0.0":
+              raise SystemExit("release version mismatch")
+
+          public_key = base64.b64decode(Path("release/SCORPION_RELEASE_PUBLIC_KEY.txt").read_text().strip(), validate=True)
+          Ed25519PublicKey.from_public_bytes(public_key).verify(
+              (build / "manifest.sig").read_bytes(),
+              manifest_bytes,
+          )
+
+          package = (build / "SCORPION_update.zip").read_bytes()
+          if hashlib.sha256(package).hexdigest().lower() != str(manifest.get("package_sha256", "")).lower():
+              raise SystemExit("update package SHA-256 mismatch")
+
+          with zipfile.ZipFile(build / "SCORPION_update.zip") as archive:
+              names = set(archive.namelist())
+              for item in manifest.get("files", []):
+                  path = str(item["path"]).replace("\\", "/")
+                  lowered = path.lower()
+                  if path.startswith("/") or ".." in Path(path).parts:
+                      raise SystemExit(f"unsafe path: {path}")
+                  if lowered == ".env" or lowered.startswith((".scorpion/", "data/")):
+                      raise SystemExit(f"protected path: {path}")
+                  if path not in names:
+                      raise SystemExit(f"missing file: {path}")
+                  digest = hashlib.sha256(archive.read(path)).hexdigest()
+                  if digest.lower() != str(item["sha256"]).lower():
+                      raise SystemExit(f"file hash mismatch: {path}")
+          PY
       - name: Create signed GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.vars.outputs.tag }}
         shell: bash
         run: |
+          set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists."
             exit 0
@@ -68,6 +128,6 @@ jobs:
             "release/$TAG/build/manifest.json#manifest.json" \
             "release/$TAG/build/manifest.sig#manifest.sig" \
             "release/$TAG/build/SCORPION_update.zip#SCORPION_update.zip" \
-            "release/$TAG/build/SCORPION_MkIII.zip#SCORPION_MkIII.zip" \
-            --title "Scorpion Mk III $TAG" \
+            "release/$TAG/build/SCORPION_MK22.zip#SCORPION_MK22.zip" \
+            --title "Scorpion MK22 $TAG" \
             --notes-file "release/$TAG/RELEASE_NOTES.md"
