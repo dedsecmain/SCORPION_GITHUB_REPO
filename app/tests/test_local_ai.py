@@ -91,3 +91,17 @@ def test_respond_can_use_explicit_role_model():
     ai.respond("look", image_bytes=b"jpeg", model="gemma3:12b")
     payload = transport.calls[-1][2]
     assert payload["model"] == "gemma3:12b"
+
+
+
+def test_system_prompt_uses_current_request_for_mk23_style():
+    transport = FakeTransport()
+    ai = OllamaLocalAI("http://127.0.0.1:11434", "gemma3:4b", transport=transport)
+
+    ai.respond("Ich habe starke Schmerzen und brauche Hilfe")
+
+    payload = transport.calls[-1][2]
+    system_prompt = payload["messages"][0]["content"]
+    assert "Scorpion MK23" in system_prompt
+    assert "Aktueller Reaktionsmodus: SERIOUS" in system_prompt
+    assert "keine Witze" in system_prompt

@@ -104,11 +104,12 @@ def test_v22_release_is_newer_than_v3():
     assert _version_tuple("v22.0.0") > _version_tuple("3.0.1")
 
 
-def test_same_v22_version_is_not_newer():
+def test_mk23_is_newer_than_mk22_and_same_version_is_not_newer():
     from scorpion.updater import is_newer_version
 
-    assert is_newer_version("v22.0.0", "22.0.0") is False
-    assert is_newer_version("v22.0.1", "22.0.0") is True
+    assert is_newer_version("v23.0.0", "22.0.0") is True
+    assert is_newer_version("v23.0.0", "23.0.0") is False
+    assert is_newer_version("v23.0.1", "23.0.0") is True
 
 
 def test_embedded_release_public_key_matches_repository_key():

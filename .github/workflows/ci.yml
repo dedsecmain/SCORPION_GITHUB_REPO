@@ -34,31 +34,37 @@ jobs:
       - name: Run tests
         shell: pwsh
         run: python -m pytest -q
-      - name: Run MK22 self-check
+      - name: Run MK23 self-check
         shell: pwsh
         run: |
           $env:PYTHONPATH = (Resolve-Path src)
           python -m scorpion.selfcheck
-      - name: Build deterministic MK22 release candidate
+      - name: Build deterministic MK23 release candidate
         shell: pwsh
         run: |
           $env:PYTHONPATH = (Resolve-Path src)
-          python -m scorpion.release_builder --app-root . --out ../dist/mk22 --version v22.0.0
-          Write-Output "MK22_MANIFEST_BEGIN"
-          Get-Content ../dist/mk22/manifest.json -Raw
-          Write-Output "MK22_MANIFEST_END"
-          $built = Get-Content ../dist/mk22/manifest.json -Raw
-          $committed = Get-Content ../release/v22.0.0/manifest.json -Raw
-          if ($built -cne $committed) {
-            throw "Committed MK22 manifest does not match deterministic release build."
-          }
-      - name: Upload MK22 release candidate
+          python -m scorpion.release_builder --app-root . --out ../dist/mk23 --version v23.0.0
+          Write-Output "MK23_MANIFEST_BEGIN"
+          Get-Content ../dist/mk23/manifest.json -Raw
+          Write-Output "MK23_MANIFEST_END"
+      - name: Upload MK23 release candidate
         uses: actions/upload-artifact@v4
         with:
-          name: scorpion-mk22-release-candidate
-          path: dist/mk22/*
+          name: scorpion-mk23-release-candidate
+          path: dist/mk23/*
           if-no-files-found: error
           retention-days: 3
+      - name: Verify committed MK23 manifest
+        shell: pwsh
+        run: |
+          if (-not (Test-Path ../release/v23.0.0/manifest.json)) {
+            throw "Committed MK23 manifest is missing."
+          }
+          $built = Get-Content ../dist/mk23/manifest.json -Raw
+          $committed = Get-Content ../release/v23.0.0/manifest.json -Raw
+          if ($built -cne $committed) {
+            throw "Committed MK23 manifest does not match deterministic release build."
+          }
       - name: Validate release manifests exclude user data
         shell: pwsh
         run: |
