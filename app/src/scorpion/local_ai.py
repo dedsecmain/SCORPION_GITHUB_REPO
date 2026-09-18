@@ -104,7 +104,7 @@ class OllamaLocalAI:
         selected_model = model or self.model
         self._require_ready(selected_model)
         recent = list(history)[-self.history_limit :] if self.history_limit else []
-        messages: list[dict] = [{"role": "system", "content": build_persona()}]
+        messages: list[dict] = [{"role": "system", "content": build_persona(user_text)}]
         for item in recent:
             role = item.get("role", "user")
             content = item.get("content", "")
