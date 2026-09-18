@@ -10,9 +10,9 @@ def run_selfcheck() -> int:
     from .voice_state import VoiceSession
 
     Settings.from_env()
-    if __version__ != "22.0.0":
-        raise RuntimeError("MK22 version self-check failed")
-    if _version_tuple("v22.0.0") != (22, 0, 0):
+    if __version__ != "23.0.0":
+        raise RuntimeError("MK23 version self-check failed")
+    if _version_tuple("v23.0.0") != (23, 0, 0):
         raise RuntimeError("Updater version parser self-check failed")
     if len(DEFAULT_PUBLIC_KEY_B64.strip()) < 40:
         raise RuntimeError("Release public key self-check failed")
