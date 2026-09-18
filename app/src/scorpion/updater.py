@@ -155,6 +155,8 @@ class Updater:
         manifest_bytes = self.transport.get_bytes(info.manifest_url)
         signature_bytes = self.transport.get_bytes(info.signature_url)
         manifest = self.verify_manifest(manifest_bytes, signature_bytes)
+        if str(manifest.get("version") or "") != info.version:
+            raise UpdateVerificationError("Manifest-Version passt nicht zum GitHub Release.")
         package = self.transport.get_bytes(info.package_url)
         expected_package = str(manifest.get("package_sha256", ""))
         if len(expected_package) != 64 or hashlib.sha256(package).hexdigest().lower() != expected_package.lower():
