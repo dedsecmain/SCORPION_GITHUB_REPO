@@ -34,12 +34,12 @@ def classify_response_tone(text: str) -> ResponseTone:
 def style_guidance(tone: ResponseTone) -> str:
     if tone is ResponseTone.SERIOUS:
         return (
-            "Antworte ruhig, klar und respektvoll. Keine Witze, kein freches Auftreten und "
+            "Antworte ruhig, klar und respektvoll; keine Witze, kein freches Auftreten und "
             "keine unnötigen Sprüche. Priorisiere Sicherheit, Präzision und konkrete nächste Schritte."
         )
     if tone is ResponseTone.FOCUSED:
         return (
-            "Arbeite präzise, souverän und direkt. Wenig Smalltalk, kurze passende Persönlichkeit, "
+            "Arbeite präzise, souverän und direkt, mit wenig Smalltalk und kurzer passender Persönlichkeit, "
             "aber technische Fakten, Status und nächste Schritte stehen klar im Vordergrund."
         )
     return (
