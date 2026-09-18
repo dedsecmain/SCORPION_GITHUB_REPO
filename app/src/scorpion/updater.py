@@ -48,6 +48,24 @@ class GitHubTransport:
             return response.read()
 
 
+def _version_tuple(value: str) -> tuple[int, ...]:
+    raw = str(value or "").strip().lower()
+    if raw.startswith("v"):
+        raw = raw[1:]
+    core = raw.split("+", 1)[0].split("-", 1)[0]
+    parts: list[int] = []
+    for item in core.split("."):
+        digits = "".join(ch for ch in item if ch.isdigit())
+        parts.append(int(digits or 0))
+    while len(parts) < 3:
+        parts.append(0)
+    return tuple(parts)
+
+
+def is_newer_version(candidate: str, current: str) -> bool:
+    return _version_tuple(candidate) > _version_tuple(current)
+
+
 def _safe_update_path(value: str) -> str:
     path = PurePosixPath(value.replace("\\", "/"))
     if path.is_absolute() or ".." in path.parts or not path.parts:
