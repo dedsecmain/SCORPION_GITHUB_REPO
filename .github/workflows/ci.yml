@@ -47,11 +47,6 @@ jobs:
           Write-Output "MK23_MANIFEST_BEGIN"
           Get-Content ../dist/mk23/manifest.json -Raw
           Write-Output "MK23_MANIFEST_END"
-          $built = Get-Content ../dist/mk23/manifest.json -Raw
-          $committed = Get-Content ../release/v23.0.0/manifest.json -Raw
-          if ($built -cne $committed) {
-            throw "Committed MK23 manifest does not match deterministic release build."
-          }
       - name: Upload MK23 release candidate
         uses: actions/upload-artifact@v4
         with:
@@ -59,6 +54,17 @@ jobs:
           path: dist/mk23/*
           if-no-files-found: error
           retention-days: 3
+      - name: Verify committed MK23 manifest
+        shell: pwsh
+        run: |
+          if (-not (Test-Path ../release/v23.0.0/manifest.json)) {
+            throw "Committed MK23 manifest is missing."
+          }
+          $built = Get-Content ../dist/mk23/manifest.json -Raw
+          $committed = Get-Content ../release/v23.0.0/manifest.json -Raw
+          if ($built -cne $committed) {
+            throw "Committed MK23 manifest does not match deterministic release build."
+          }
       - name: Validate release manifests exclude user data
         shell: pwsh
         run: |
