@@ -84,6 +84,9 @@ def settings(tmp_path: Path, mode=Mode.LOCAL) -> Settings:
         local_model="gemma3:4b",
         ollama_url="http://127.0.0.1:11434",
         whisper_model="base",
+        adaptive_path=tmp_path / "adaptive.json",
+        long_term_memory_path=tmp_path / "long_term_memory.json",
+        app_trust_path=tmp_path / "app_trust.json",
     )
 
 
@@ -153,3 +156,39 @@ def test_text_and_vision_use_different_selected_models(tmp_path):
     assert local.calls[-1][3] == "qwen3:8b"
     controller._ask_local("was ist auf meinem bild?", image_bytes=b"jpeg")
     assert local.calls[-1][3] == "gemma3:12b"
+
+
+def test_first_use_app_approval_trusts_then_executes(tmp_path, monkeypatch):
+    controller, _local, _cloud, _audio = make_controller(
+        tmp_path,
+        approval=lambda _reason: False,
+    )
+    approvals = []
+    controller.action_approval_callback = lambda reason: approvals.append(reason) or True
+
+    monkeypatch.setattr(
+        "scorpion.app.execute_windows_action",
+        lambda target, trust_registry=None: (True, f"{target} geöffnet."),
+    )
+
+    answer = controller.handle("öffne den rechner")
+
+    assert answer == "calculator geöffnet."
+    assert approvals and "Erste App-Freigabe" in approvals[0]
+    assert controller.app_trust.is_trusted("calc.exe") is True
+
+
+def test_denied_first_use_app_approval_has_no_side_effect(tmp_path, monkeypatch):
+    controller, _local, _cloud, _audio = make_controller(tmp_path)
+    controller.action_approval_callback = lambda _reason: False
+    calls = []
+    monkeypatch.setattr(
+        "scorpion.app.execute_windows_action",
+        lambda target, trust_registry=None: calls.append(target) or (True, "unexpected"),
+    )
+
+    answer = controller.handle("öffne den rechner")
+
+    assert "Freigabe" in answer
+    assert calls == []
+    assert controller.app_trust.is_trusted("calc.exe") is False
