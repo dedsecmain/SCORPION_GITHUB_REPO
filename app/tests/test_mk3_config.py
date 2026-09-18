@@ -30,3 +30,8 @@ def test_setup_installs_mk3_dependencies():
 def test_update_channel_defaults_to_official_repo(monkeypatch):
     monkeypatch.delenv("SCORPION_GITHUB_REPO", raising=False)
     assert Settings.from_env().github_repo == "dedsecmain/SCORPION_GITHUB_REPO"
+
+
+def test_unofficial_update_repository_is_rejected(monkeypatch):
+    monkeypatch.setenv("SCORPION_GITHUB_REPO", "attacker/fake-scorpion")
+    assert Settings.from_env().github_repo == ""
