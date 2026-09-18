@@ -6,6 +6,9 @@ from enum import Enum
 from pathlib import Path
 
 
+OFFICIAL_GITHUB_REPO = "dedsecmain/SCORPION_GITHUB_REPO"
+
+
 class Mode(str, Enum):
     LOCAL = "LOCAL"
     HYBRID = "HYBRID"
@@ -25,6 +28,13 @@ def _env_bool(name: str, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _official_update_repo(value: str | None) -> str:
+    normalized = (value or OFFICIAL_GITHUB_REPO).strip().strip("/")
+    if normalized.casefold() != OFFICIAL_GITHUB_REPO.casefold():
+        return ""
+    return OFFICIAL_GITHUB_REPO
 
 
 @dataclass(frozen=True)
@@ -61,7 +71,7 @@ class Settings:
     app_trust_path: Path = Path.home() / ".scorpion" / "app_trust.json"
     screen_context_enabled: bool = True
     screen_context_interval_ms: int = 1000
-    github_repo: str = "dedsecmain/SCORPION_GITHUB_REPO"
+    github_repo: str = OFFICIAL_GITHUB_REPO
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -111,5 +121,5 @@ class Settings:
                 100,
                 int(os.getenv("SCORPION_SCREEN_CONTEXT_INTERVAL_MS", "1000")),
             ),
-            github_repo=os.getenv("SCORPION_GITHUB_REPO", "dedsecmain/SCORPION_GITHUB_REPO").strip(),
+            github_repo=_official_update_repo(os.getenv("SCORPION_GITHUB_REPO")),
         )
