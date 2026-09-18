@@ -249,6 +249,12 @@ class ScorpionController:
                 lambda: focus_windows_target(command.target, trust_registry=self.app_trust),
             )
         if command.kind is CommandKind.SCREEN:
+            if callable(getattr(self.local_ai, "available_models", None)):
+                result = self.local_vision.analyze_current(self.screen_context, text)
+                if not result.summary.startswith("Lokale Bildanalyse nicht verfügbar:"):
+                    self._remember_answer(text, result.summary)
+                    return result.summary
+                return result.summary
             try:
                 image_bytes = self.screen.capture_jpeg()
             except Exception as exc:
