@@ -34,3 +34,16 @@ jobs:
       - name: Run tests
         shell: pwsh
         run: python -m pytest -q
+      - name: Validate release manifests exclude user data
+        shell: pwsh
+        run: |
+          $manifests = Get-ChildItem ..\release -Filter manifest.json -Recurse -ErrorAction SilentlyContinue
+          foreach ($file in $manifests) {
+            $manifest = Get-Content $file.FullName -Raw | ConvertFrom-Json
+            foreach ($entry in $manifest.files) {
+              $path = [string]$entry.path
+              if ($path -match '(^|/)(\.env|\.scorpion|data)(/|$)' -or $path -match '(?i)(memory|adaptive).*\.json$' -or $path -match '(?i)(private|signing)[_-]?key') {
+                throw "Protected path found in release manifest: $path"
+              }
+            }
+          }
