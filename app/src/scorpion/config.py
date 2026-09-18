@@ -61,7 +61,7 @@ class Settings:
     app_trust_path: Path = Path.home() / ".scorpion" / "app_trust.json"
     screen_context_enabled: bool = True
     screen_context_interval_ms: int = 1000
-    github_repo: str = ""
+    github_repo: str = "dedsecmain/SCORPION_GITHUB_REPO"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -111,5 +111,5 @@ class Settings:
                 100,
                 int(os.getenv("SCORPION_SCREEN_CONTEXT_INTERVAL_MS", "1000")),
             ),
-            github_repo=os.getenv("SCORPION_GITHUB_REPO", "").strip(),
+            github_repo=os.getenv("SCORPION_GITHUB_REPO", "dedsecmain/SCORPION_GITHUB_REPO").strip(),
         )
