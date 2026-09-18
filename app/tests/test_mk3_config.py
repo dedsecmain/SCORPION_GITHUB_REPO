@@ -27,6 +27,6 @@ def test_setup_installs_mk3_dependencies():
     assert "cryptography" in text
 
 
-def test_update_channel_is_disabled_when_repo_missing(monkeypatch):
+def test_update_channel_defaults_to_official_repo(monkeypatch):
     monkeypatch.delenv("SCORPION_GITHUB_REPO", raising=False)
-    assert Settings.from_env().github_repo == ""
+    assert Settings.from_env().github_repo == "dedsecmain/SCORPION_GITHUB_REPO"
