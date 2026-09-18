@@ -34,3 +34,41 @@ jobs:
       - name: Run tests
         shell: pwsh
         run: python -m pytest -q
+      - name: Run MK22 self-check
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH = (Resolve-Path src)
+          python -m scorpion.selfcheck
+      - name: Build deterministic MK22 release candidate
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH = (Resolve-Path src)
+          python -m scorpion.release_builder --app-root . --out ../dist/mk22 --version v22.0.0
+          Write-Output "MK22_MANIFEST_BEGIN"
+          Get-Content ../dist/mk22/manifest.json -Raw
+          Write-Output "MK22_MANIFEST_END"
+          $built = Get-Content ../dist/mk22/manifest.json -Raw
+          $committed = Get-Content ../release/v22.0.0/manifest.json -Raw
+          if ($built -cne $committed) {
+            throw "Committed MK22 manifest does not match deterministic release build."
+          }
+      - name: Upload MK22 release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: scorpion-mk22-release-candidate
+          path: dist/mk22/*
+          if-no-files-found: error
+          retention-days: 3
+      - name: Validate release manifests exclude user data
+        shell: pwsh
+        run: |
+          $manifests = Get-ChildItem ..\release -Filter manifest.json -Recurse -ErrorAction SilentlyContinue
+          foreach ($file in $manifests) {
+            $manifest = Get-Content $file.FullName -Raw | ConvertFrom-Json
+            foreach ($entry in $manifest.files) {
+              $path = [string]$entry.path
+              if ($path -match '(^|/)(\.env|\.scorpion|data)(/|$)' -or $path -match '(?i)(memory|adaptive).*\.json$' -or $path -match '(?i)(private|signing)[_-]?key') {
+                throw "Protected path found in release manifest: $path"
+              }
+            }
+          }

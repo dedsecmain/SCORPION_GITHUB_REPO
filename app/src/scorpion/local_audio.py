@@ -35,7 +35,7 @@ class LocalAudioService:
         whisper_factory: Callable[[str], object] | None = None,
         tts_factory: Callable[[], object] | None = None,
         natural_tts_factory: Callable[[], object] | None = None,
-        natural_voice: str = "de-CH-LeniNeural",
+        natural_voice: str = "de-DE-KatjaNeural",
         natural_voice_rate: str = "-4%",
         natural_voice_pitch: str = "+0Hz",
         natural_voice_enabled: bool = True,
@@ -58,6 +58,8 @@ class LocalAudioService:
             )
         )
         self._natural_tts = None
+        self._fallback_tts = None
+        self._barge_in_listener = None
         self._whispers: dict[str, object] = {}
         self.temp_dir = Path(temp_dir) if temp_dir is not None else Path(tempfile.gettempdir())
         self._stream_factory = stream_factory
@@ -98,6 +100,9 @@ class LocalAudioService:
         from .natural_tts import NaturalVoiceService
 
         return NaturalVoiceService(voice=voice, rate=rate, pitch=pitch)
+
+    def set_barge_in_listener(self, listener) -> None:
+        self._barge_in_listener = listener
 
     def set_command_whisper_model(self, model_name: str) -> None:
         if model_name and model_name != "auto":
@@ -277,23 +282,55 @@ class LocalAudioService:
         path = self._write_wav(b"".join(pcm_parts), sample_rate, prefix="scorpion_command_")
         return SpeechCaptureResult(path, True, False, max_level)
 
-    def speak(self, text: str) -> bool:
-        if self.natural_voice_enabled:
+    def stop(self) -> None:
+        """Stop current TTS playback. Safe to call repeatedly."""
+        natural = self._natural_tts
+        if natural is not None:
+            stopper = getattr(natural, "stop", None)
+            if callable(stopper):
+                try:
+                    stopper()
+                except Exception:
+                    pass
+        engine = self._fallback_tts
+        if engine is not None:
             try:
-                if self._natural_tts is None:
-                    self._natural_tts = self._natural_tts_factory()
-                if self._natural_tts.speak(text[:6000]):
-                    return True
+                engine.stop()
             except Exception:
                 pass
 
+    def speak(self, text: str, *, allow_barge_in: bool = True) -> bool:
+        listener = self._barge_in_listener if allow_barge_in else None
+        if listener is not None:
+            try:
+                listener.begin_assistant_speech(text)
+            except Exception:
+                listener = None
         try:
-            engine = self._tts_factory()
-            engine.say(text[:6000])
-            engine.runAndWait()
-            return True
-        except Exception:
-            return False
+            if self.natural_voice_enabled:
+                try:
+                    if self._natural_tts is None:
+                        self._natural_tts = self._natural_tts_factory()
+                    if self._natural_tts.speak(text[:6000]):
+                        return True
+                except Exception:
+                    pass
+
+            try:
+                self._fallback_tts = self._tts_factory()
+                self._fallback_tts.say(text[:6000])
+                self._fallback_tts.runAndWait()
+                return True
+            except Exception:
+                return False
+            finally:
+                self._fallback_tts = None
+        finally:
+            if listener is not None:
+                try:
+                    listener.end_assistant_speech()
+                except Exception:
+                    pass
 
     def speech_status(self) -> str:
         whisper_ok = importlib.util.find_spec("faster_whisper") is not None

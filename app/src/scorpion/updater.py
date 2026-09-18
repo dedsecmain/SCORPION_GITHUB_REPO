@@ -24,7 +24,7 @@ ALLOWED_UPDATE_PREFIXES = (
 )
 
 # Project release-signing public key. Replace only as part of a signed updater migration.
-DEFAULT_PUBLIC_KEY_B64 = base64.b64encode(bytes(range(32))).decode("ascii")
+DEFAULT_PUBLIC_KEY_B64 = "jhJyK4L4bIR5vX/z1savl6Jo7pc2xcOiJymdz5FxE3g="
 
 
 @dataclass(frozen=True)
@@ -38,14 +38,32 @@ class UpdateInfo:
 
 class GitHubTransport:
     def get_json(self, url: str) -> dict:
-        req = request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "Scorpion-MkIII"})
+        req = request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "Scorpion-MK22"})
         with request.urlopen(req, timeout=8) as response:
             return json.loads(response.read().decode("utf-8"))
 
     def get_bytes(self, url: str) -> bytes:
-        req = request.Request(url, headers={"User-Agent": "Scorpion-MkIII"})
+        req = request.Request(url, headers={"User-Agent": "Scorpion-MK22"})
         with request.urlopen(req, timeout=30) as response:
             return response.read()
+
+
+def _version_tuple(value: str) -> tuple[int, ...]:
+    raw = str(value or "").strip().lower()
+    if raw.startswith("v"):
+        raw = raw[1:]
+    core = raw.split("+", 1)[0].split("-", 1)[0]
+    parts: list[int] = []
+    for item in core.split("."):
+        digits = "".join(ch for ch in item if ch.isdigit())
+        parts.append(int(digits or 0))
+    while len(parts) < 3:
+        parts.append(0)
+    return tuple(parts)
+
+
+def is_newer_version(candidate: str, current: str) -> bool:
+    return _version_tuple(candidate) > _version_tuple(current)
 
 
 def _safe_update_path(value: str) -> str:
@@ -92,7 +110,7 @@ class Updater:
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.state_path.write_text(json.dumps({"last_check": time.time()}), encoding="utf-8")
 
-    def check(self, *, force: bool = False) -> UpdateInfo | None:
+    def check(self, *, force: bool = False, current_version: str | None = None) -> UpdateInfo | None:
         if not self.repo:
             return None
         state = self._load_state()
@@ -105,6 +123,8 @@ class Updater:
             for item in data.get("assets", [])
             if isinstance(item, dict)
         }
+        if current_version and not is_newer_version(str(data.get("tag_name") or "0"), current_version):
+            return None
         required = ("manifest.json", "manifest.sig", "SCORPION_update.zip")
         if not all(assets.get(name) for name in required):
             raise UpdateVerificationError("GitHub Release enthält nicht alle signierten Update-Dateien.")
@@ -155,6 +175,8 @@ class Updater:
         manifest_bytes = self.transport.get_bytes(info.manifest_url)
         signature_bytes = self.transport.get_bytes(info.signature_url)
         manifest = self.verify_manifest(manifest_bytes, signature_bytes)
+        if str(manifest.get("version") or "") != info.version:
+            raise UpdateVerificationError("Manifest-Version passt nicht zum GitHub Release.")
         package = self.transport.get_bytes(info.package_url)
         expected_package = str(manifest.get("package_sha256", ""))
         if len(expected_package) != 64 or hashlib.sha256(package).hexdigest().lower() != expected_package.lower():

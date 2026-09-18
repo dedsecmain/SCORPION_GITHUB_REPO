@@ -96,3 +96,25 @@ def test_valid_ed25519_signature_is_accepted(tmp_path):
     )
     parsed = updater.verify_manifest(manifest, signature)
     assert parsed["files"][0]["path"] == "README.md"
+
+
+def test_v22_release_is_newer_than_v3():
+    from scorpion.updater import _version_tuple
+
+    assert _version_tuple("v22.0.0") > _version_tuple("3.0.1")
+
+
+def test_same_v22_version_is_not_newer():
+    from scorpion.updater import is_newer_version
+
+    assert is_newer_version("v22.0.0", "22.0.0") is False
+    assert is_newer_version("v22.0.1", "22.0.0") is True
+
+
+def test_embedded_release_public_key_matches_repository_key():
+    from scorpion.updater import DEFAULT_PUBLIC_KEY_B64
+
+    repo_key = (Path(__file__).resolve().parents[2] / "release" / "SCORPION_RELEASE_PUBLIC_KEY.txt").read_text(
+        encoding="utf-8"
+    ).strip()
+    assert DEFAULT_PUBLIC_KEY_B64 == repo_key

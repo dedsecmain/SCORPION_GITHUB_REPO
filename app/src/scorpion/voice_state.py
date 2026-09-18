@@ -63,6 +63,14 @@ class VoiceSession:
             self.state = VoiceState.LISTENING
         return self.state
 
+    def user_started_speaking(self) -> VoiceState:
+        """Enter LISTENING when the user talks over Scorpion's own speech."""
+        if self.state is VoiceState.SPEAKING:
+            self._deadline = None
+            self.state = VoiceState.LISTENING
+            return self.state
+        return self.first_speech_started()
+
     def on_first_speech(self) -> VoiceState:
         return self.first_speech_started()
 

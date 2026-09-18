@@ -2,12 +2,20 @@ from __future__ import annotations
 
 
 def run_selfcheck() -> int:
+    from . import __version__
     from .cloud_gate import CloudGate
     from .config import Settings
     from .hud import SystemPanelModel
+    from .updater import DEFAULT_PUBLIC_KEY_B64, _version_tuple
     from .voice_state import VoiceSession
 
     Settings.from_env()
+    if __version__ != "22.0.0":
+        raise RuntimeError("MK22 version self-check failed")
+    if _version_tuple("v22.0.0") != (22, 0, 0):
+        raise RuntimeError("Updater version parser self-check failed")
+    if len(DEFAULT_PUBLIC_KEY_B64.strip()) < 40:
+        raise RuntimeError("Release public key self-check failed")
     gate = CloudGate(lambda _reason: False)
     if gate.request_approval("selfcheck") is not None:
         raise RuntimeError("CloudGate self-check failed")

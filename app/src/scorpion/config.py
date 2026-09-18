@@ -6,6 +6,9 @@ from enum import Enum
 from pathlib import Path
 
 
+OFFICIAL_GITHUB_REPO = "dedsecmain/SCORPION_GITHUB_REPO"
+
+
 class Mode(str, Enum):
     LOCAL = "LOCAL"
     HYBRID = "HYBRID"
@@ -27,6 +30,13 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _official_update_repo(value: str | None) -> str:
+    normalized = (value or OFFICIAL_GITHUB_REPO).strip().strip("/")
+    if normalized.casefold() != OFFICIAL_GITHUB_REPO.casefold():
+        return ""
+    return OFFICIAL_GITHUB_REPO
+
+
 @dataclass(frozen=True)
 class Settings:
     api_key: str | None
@@ -44,7 +54,7 @@ class Settings:
     local_model: str = ""
     ollama_url: str = "http://127.0.0.1:11434"
     whisper_model: str = "base"
-    natural_voice: str = "de-CH-LeniNeural"
+    natural_voice: str = "de-DE-KatjaNeural"
     natural_voice_rate: str = "-4%"
     natural_voice_pitch: str = "+0Hz"
     natural_voice_enabled: bool = True
@@ -55,7 +65,13 @@ class Settings:
     command_whisper_model: str = "auto"
     vad_aggressiveness: int = 2
     adaptive_path: Path = Path.home() / ".scorpion" / "adaptive.json"
-    github_repo: str = ""
+    long_term_memory_path: Path = Path.home() / ".scorpion" / "long_term_memory.json"
+    drive_sync_enabled: bool = False
+    drive_folder: str = "ScorpionMemory"
+    app_trust_path: Path = Path.home() / ".scorpion" / "app_trust.json"
+    screen_context_enabled: bool = True
+    screen_context_interval_ms: int = 1000
+    github_repo: str = OFFICIAL_GITHUB_REPO
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -75,7 +91,7 @@ class Settings:
             local_model=os.getenv("SCORPION_LOCAL_MODEL", "").strip(),
             ollama_url=os.getenv("SCORPION_OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/"),
             whisper_model=os.getenv("SCORPION_WHISPER_MODEL", "base"),
-            natural_voice=os.getenv("SCORPION_NATURAL_VOICE", "de-CH-LeniNeural"),
+            natural_voice=os.getenv("SCORPION_NATURAL_VOICE", "de-DE-KatjaNeural"),
             natural_voice_rate=os.getenv("SCORPION_NATURAL_VOICE_RATE", "-4%"),
             natural_voice_pitch=os.getenv("SCORPION_NATURAL_VOICE_PITCH", "+0Hz"),
             natural_voice_enabled=_env_bool("SCORPION_NATURAL_VOICE_ENABLED", True),
@@ -86,5 +102,24 @@ class Settings:
             command_whisper_model=os.getenv("SCORPION_COMMAND_WHISPER_MODEL", "auto"),
             vad_aggressiveness=int(os.getenv("SCORPION_VAD_AGGRESSIVENESS", "2")),
             adaptive_path=Path(os.getenv("SCORPION_ADAPTIVE_PATH", str(Path.home() / ".scorpion" / "adaptive.json"))),
-            github_repo=os.getenv("SCORPION_GITHUB_REPO", "").strip(),
+            long_term_memory_path=Path(
+                os.getenv(
+                    "SCORPION_LONG_TERM_MEMORY_PATH",
+                    str(Path.home() / ".scorpion" / "long_term_memory.json"),
+                )
+            ),
+            drive_sync_enabled=_env_bool("SCORPION_DRIVE_SYNC_ENABLED", False),
+            drive_folder=os.getenv("SCORPION_DRIVE_FOLDER", "ScorpionMemory").strip() or "ScorpionMemory",
+            app_trust_path=Path(
+                os.getenv(
+                    "SCORPION_APP_TRUST_PATH",
+                    str(Path.home() / ".scorpion" / "app_trust.json"),
+                )
+            ),
+            screen_context_enabled=_env_bool("SCORPION_SCREEN_CONTEXT_ENABLED", True),
+            screen_context_interval_ms=max(
+                100,
+                int(os.getenv("SCORPION_SCREEN_CONTEXT_INTERVAL_MS", "1000")),
+            ),
+            github_repo=_official_update_repo(os.getenv("SCORPION_GITHUB_REPO")),
         )

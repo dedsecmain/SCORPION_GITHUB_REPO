@@ -5,8 +5,16 @@ import time
 import traceback
 from collections.abc import Callable
 
-from .actions import execute_windows_action, focus_windows_target
+from .actions import (
+    execute_preflighted_action,
+    execute_windows_action,
+    focus_windows_target,
+    preflight_windows_action,
+    resolve_app_id,
+)
 from .adaptive import AdaptiveStore
+from .app_trust import AppTrustRegistry
+from .audit_log import AuditLog
 from .camera import CameraService
 from .cloud_ai import CloudAI, CloudUnavailableError
 from .cloud_gate import CloudApprovalError, CloudGate
@@ -18,11 +26,16 @@ from .hardware import HardwareProfiler
 from .listener import ContinuousWakeListener
 from .local_ai import OllamaLocalAI
 from .local_audio import LocalAudioService
+from .local_vision import LocalVision
 from .model_manager import ModelManager
+from .model_router import ModelRouter, TaskKind
 from .memory import ConversationMemory
+from .long_term_memory import LongTermMemoryStore
 from .router import AssistantRouter, RouteStatus
 from .screen import ScreenService
+from .screen_context import ScreenContextMonitor
 from .updater import Updater, UpdateVerificationError
+from . import __version__
 from .update_helper import apply_update
 from .wake_matcher import WakeMatcher
 
@@ -33,6 +46,7 @@ class ScorpionController:
         settings: Settings,
         *,
         approval_callback: Callable[[str], bool] | None = None,
+        action_approval_callback: Callable[[str], bool] | None = None,
         local_ai=None,
         local_audio=None,
         cloud_ai=None,
@@ -46,6 +60,7 @@ class ScorpionController:
         self.settings = settings
         self.mode = settings.mode
         self.memory = ConversationMemory(settings.memory_path)
+        self.long_term_memory = LongTermMemoryStore(settings.long_term_memory_path)
         self.hardware_profile = None
         self.adaptive = adaptive_store or AdaptiveStore(settings.adaptive_path)
         self.hardware_profiler = hardware_profiler or HardwareProfiler()
@@ -74,10 +89,31 @@ class ScorpionController:
         )
         self.cloud_gate = CloudGate(approval_callback or (lambda _reason: False))
         self.cloud_ai = cloud_ai or CloudAI(self.cloud_gate, settings.api_key, settings.model)
+        self.action_approval_callback = action_approval_callback or (lambda _reason: False)
+        self.app_trust = AppTrustRegistry(settings.app_trust_path)
+        self.audit = AuditLog()
         self.handoff = handoff or ChatGPTHandoff()
         self.router = AssistantRouter(self.local_ai)
+        try:
+            installed_models = set(self.local_ai.available_models())
+        except Exception:
+            installed_models = set()
+        if self.hardware_profile is None:
+            try:
+                self.hardware_profile = self.hardware_profiler.profile()
+            except Exception:
+                self.hardware_profile = None
+        routing_profile = self.hardware_profile or "low"
+        self.model_router = ModelRouter(
+            model_manager=self.model_manager,
+            hardware_profile=routing_profile,
+            installed_models=installed_models,
+            adaptive_store=self.adaptive,
+        )
         self.camera = CameraService()
         self.screen = ScreenService()
+        self.screen_context = ScreenContextMonitor(interval_ms=settings.screen_context_interval_ms)
+        self.local_vision = LocalVision(self.local_ai, model=self.vision_model)
         self.last_user_text = ""
         self.last_image_bytes: bytes | None = None
 
@@ -127,10 +163,23 @@ class ScorpionController:
         self.memory.append("user", text)
         self.memory.append("assistant", answer)
 
+    @staticmethod
+    def _task_complexity(text: str) -> float:
+        lowered = text.casefold()
+        score = min(0.65, len(text) / 1800.0)
+        if any(word in lowered for word in ("analysiere", "begründe", "architektur", "debug", "vergleich", "strategie")):
+            score += 0.35
+        return max(0.0, min(1.0, score))
+
     def _ask_local(self, text: str, image_bytes: bytes | None = None) -> str:
         self.last_user_text = text
         self.last_image_bytes = image_bytes
-        selected_model = self.vision_model if image_bytes is not None else self.text_model
+        complexity = self._task_complexity(text)
+        kind = TaskKind.VISION if image_bytes is not None else (
+            TaskKind.REASONING if complexity >= 0.75 else TaskKind.CHAT
+        )
+        route = self.model_router.route(kind, complexity=complexity)
+        selected_model = route.model or (self.vision_model if image_bytes is not None else self.text_model)
         started = time.monotonic()
         result = self.router.handle_local(
             text,
@@ -139,26 +188,73 @@ class ScorpionController:
             model=selected_model,
         )
         try:
-            self.adaptive.record_model_metric(
-                selected_model,
-                latency_s=time.monotonic() - started,
-                success=result.status is RouteStatus.ANSWER,
-            )
+            if route.model:
+                self.model_router.record_result(
+                    route,
+                    latency_ms=(time.monotonic() - started) * 1000.0,
+                    success=result.status is RouteStatus.ANSWER,
+                )
+            else:
+                self.adaptive.record_model_metric(
+                    selected_model,
+                    latency_s=time.monotonic() - started,
+                    success=result.status is RouteStatus.ANSWER,
+                )
         except Exception:
             pass
         if result.status is RouteStatus.ANSWER:
             self._remember_answer(text, result.text)
         return result.text
 
+    def _run_app_action(self, action: str, target: str, executor) -> str:
+        preflight = preflight_windows_action(
+            action,
+            target,
+            trust_registry=self.app_trust,
+        )
+        app_id = resolve_app_id(target)
+        if not preflight.allowed and app_id is not None:
+            approved = self.action_approval_callback(
+                f"Erste App-Freigabe: {app_id}. Aktion: {action}. Ziel: {target}."
+            )
+            if approved:
+                self.app_trust.set_trust(app_id, True)
+                preflight = preflight_windows_action(
+                    action,
+                    target,
+                    trust_registry=self.app_trust,
+                )
+        _ok, message = execute_preflighted_action(
+            preflight,
+            confirm=lambda pf: self.action_approval_callback(
+                f"Bestätigung erforderlich. Risiko: {pf.risk.value}. Aktion: {pf.action}. Ziel: {pf.target}."
+            ),
+            executor=executor,
+            audit_log=self.audit,
+        )
+        return message
+
     def handle(self, text: str, image_bytes: bytes | None = None) -> str:
         command = parse_command(text)
         if command.kind is CommandKind.OPEN_APP and command.target:
-            _, message = execute_windows_action(command.target)
-            return message
+            return self._run_app_action(
+                "open_app",
+                command.target,
+                lambda: execute_windows_action(command.target, trust_registry=self.app_trust),
+            )
         if command.kind is CommandKind.FOCUS_APP and command.target:
-            _, message = focus_windows_target(command.target)
-            return message
+            return self._run_app_action(
+                "focus_window",
+                command.target,
+                lambda: focus_windows_target(command.target, trust_registry=self.app_trust),
+            )
         if command.kind is CommandKind.SCREEN:
+            if callable(getattr(self.local_ai, "available_models", None)):
+                result = self.local_vision.analyze_current(self.screen_context, text)
+                if not result.summary.startswith("Lokale Bildanalyse nicht verfügbar:"):
+                    self._remember_answer(text, result.summary)
+                    return result.summary
+                return result.summary
             try:
                 image_bytes = self.screen.capture_jpeg()
             except Exception as exc:
@@ -257,7 +353,7 @@ def run_app() -> None:
     ctk.set_appearance_mode("dark")
 
     root = ctk.CTk(fg_color=THEME["bg"])
-    root.title("SCORPION Mk III")
+    root.title("SCORPION MK22")
     root.geometry("1400x840")
     root.minsize(1120, 700)
     root.grid_columnconfigure(0, weight=0, minsize=185)
@@ -296,7 +392,27 @@ def run_app() -> None:
         done.wait()
         return approved["value"]
 
-    controller = ScorpionController(settings, approval_callback=approval_callback, handoff=handoff)
+    def action_approval_callback(reason: str) -> bool:
+        done = threading.Event()
+        approved = {"value": False}
+
+        def show_dialog() -> None:
+            approved["value"] = messagebox.askyesno(
+                "Scorpion · Aktion bestätigen",
+                reason + "\n\nNur mit Ja wird diese konkrete Freigabe erteilt.",
+            )
+            done.set()
+
+        root.after(0, show_dialog)
+        done.wait()
+        return approved["value"]
+
+    controller = ScorpionController(
+        settings,
+        approval_callback=approval_callback,
+        action_approval_callback=action_approval_callback,
+        handoff=handoff,
+    )
     updater = Updater(settings.github_repo)
     wake_listener: ContinuousWakeListener | None = None
     voice_runtime = {"state": "STANDBY", "deadline": None}
@@ -313,7 +429,7 @@ def run_app() -> None:
     ).pack(anchor="w", padx=16, pady=(24, 0))
     ctk.CTkLabel(
         rail,
-        text="MK III · ADAPTIVE CORE",
+        text="MK22 · ADAPTIVE CORE",
         font=ctk.CTkFont(size=10, weight="bold"),
         text_color=THEME["cyan"],
     ).pack(anchor="w", padx=16, pady=(2, 20))
@@ -462,6 +578,8 @@ def run_app() -> None:
     status_card("OLLAMA", "CHECKING", "ollama")
     status_card("SPEECH", "CHECKING", "speech")
     status_card("HARDWARE", "CHECKING", "hardware")
+    status_card("ACTIVE APP", "NO ACTIVE APP", "active_app")
+    status_card("SCREEN CONTEXT", "LOCAL CONTEXT OFF", "screen_context", THEME["muted"])
     cloud_label = status_card("CLOUD GUARD", "OPENAI LOCKED 🔒", "cloud", THEME["success"])
     cloud_status_ref["label"] = cloud_label
     status_card("CORE UPDATE", "CHANNEL OFF" if not settings.github_repo else "UP TO DATE", "update", THEME["muted"])
@@ -492,7 +610,7 @@ def run_app() -> None:
 
     append_chat(
         "SCORPION",
-        "Mk III Core online. Sag „Scorpion“. Ich antworte mit „Ja, Herr Rodriguez.“ und warte bis zu 20 Sekunden auf deinen Befehl.",
+        "MK22 Core online. Sag „Scorpion“. Ich antworte mit „Ja, Herr Rodriguez.“ und warte bis zu 20 Sekunden auf deinen Befehl.",
     )
 
     def run_bg(fn) -> None:
@@ -570,6 +688,17 @@ def run_app() -> None:
             root.after(0, lambda: status_refs["hardware"].configure(text=hardware[:58]))
 
         run_bg(work)
+
+    def on_screen_context(context) -> None:
+        active = context.active_app or "NO ACTIVE APP"
+        root.after(0, lambda: status_refs["active_app"].configure(text=active[:50]))
+        root.after(
+            0,
+            lambda: status_refs["screen_context"].configure(
+                text="LOCAL CONTEXT ACTIVE",
+                text_color=THEME["success"],
+            ),
+        )
 
     def ask(text: str, image_bytes: bytes | None = None, speak: bool = True) -> None:
         text = text.strip()
@@ -750,7 +879,7 @@ def run_app() -> None:
 
         def work() -> None:
             try:
-                info = updater.check(force=not automatic)
+                info = updater.check(force=not automatic, current_version=__version__)
                 if info is None:
                     if not automatic:
                         root.after(0, lambda: append_chat("SYSTEM", "Kein neuer Update-Check nötig bzw. kein Update gemeldet."))
@@ -833,6 +962,7 @@ def run_app() -> None:
     def shutdown() -> None:
         if wake_listener:
             wake_listener.stop()
+        controller.screen_context.stop()
         root.destroy()
 
     entry.bind("<Return>", lambda _event: on_send())
@@ -840,6 +970,8 @@ def run_app() -> None:
     entry.focus_set()
     refresh_status()
     set_voice_visual("STANDBY")
+    if settings.screen_context_enabled:
+        controller.screen_context.start(on_screen_context)
     if settings.wake_listener_enabled:
         root.after(700, toggle_wake)
     if settings.github_repo:

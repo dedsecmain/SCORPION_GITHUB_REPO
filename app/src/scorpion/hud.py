@@ -26,6 +26,8 @@ class SystemPanelModel:
     speech_label: str = "LOCAL SPEECH"
     ollama_label: str = "OLLAMA CHECKING"
     cloud_label: str = "OPENAI LOCKED 🔒"
+    active_app_label: str = "NO ACTIVE APP"
+    screen_context_label: str = "LOCAL CONTEXT OFF"
     mic_level: float = 0.0
 
     @classmethod
