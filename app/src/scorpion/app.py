@@ -102,10 +102,11 @@ class ScorpionController:
             try:
                 self.hardware_profile = self.hardware_profiler.profile()
             except Exception:
-                self.hardware_profile = "low"
+                self.hardware_profile = None
+        routing_profile = self.hardware_profile or "low"
         self.model_router = ModelRouter(
             model_manager=self.model_manager,
-            hardware_profile=self.hardware_profile,
+            hardware_profile=routing_profile,
             installed_models=installed_models,
             adaptive_store=self.adaptive,
         )
