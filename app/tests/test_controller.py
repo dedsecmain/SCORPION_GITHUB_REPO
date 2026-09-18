@@ -192,3 +192,36 @@ def test_denied_first_use_app_approval_has_no_side_effect(tmp_path, monkeypatch)
     assert "Freigabe" in answer
     assert calls == []
     assert controller.app_trust.is_trusted("calc.exe") is False
+
+
+class VisionReadyFakeLocalAI(RoleAwareFakeLocalAI):
+    def available_models(self):
+        return {"gemma3:4b"}
+
+    def respond(self, text, history=(), image_bytes=None, *, model=None):
+        self.calls.append((text, list(history), image_bytes, model))
+        return '{"summary":"Lokale Bildschirmansicht","elements":[]}'
+
+
+class FakeScreenContext:
+    def capture_frame(self):
+        from PIL import Image
+        return Image.new("RGB", (32, 24), "white")
+
+
+def test_screen_command_uses_dedicated_local_vision_when_available(tmp_path):
+    local = VisionReadyFakeLocalAI()
+    controller = ScorpionController(
+        settings(tmp_path),
+        local_ai=local,
+        local_audio=FakeAudio(),
+        cloud_ai=FakeCloudAI(),
+        handoff=FakeHandoff(),
+    )
+    controller.screen_context = FakeScreenContext()
+
+    answer = controller.handle("was ist auf meinem bildschirm?")
+
+    assert answer == "Lokale Bildschirmansicht"
+    assert local.calls[-1][2] is not None
+    assert local.calls[-1][3] == "gemma3:4b"
