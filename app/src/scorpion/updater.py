@@ -24,7 +24,7 @@ ALLOWED_UPDATE_PREFIXES = (
 )
 
 # Project release-signing public key. Replace only as part of a signed updater migration.
-DEFAULT_PUBLIC_KEY_B64 = base64.b64encode(bytes(range(32))).decode("ascii")
+DEFAULT_PUBLIC_KEY_B64 = "jhJyK4L4bIR5vX/z1savl6Jo7pc2xcOiJymdz5FxE3g="
 
 
 @dataclass(frozen=True)
@@ -38,12 +38,12 @@ class UpdateInfo:
 
 class GitHubTransport:
     def get_json(self, url: str) -> dict:
-        req = request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "Scorpion-MkIII"})
+        req = request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "Scorpion-MK22"})
         with request.urlopen(req, timeout=8) as response:
             return json.loads(response.read().decode("utf-8"))
 
     def get_bytes(self, url: str) -> bytes:
-        req = request.Request(url, headers={"User-Agent": "Scorpion-MkIII"})
+        req = request.Request(url, headers={"User-Agent": "Scorpion-MK22"})
         with request.urlopen(req, timeout=30) as response:
             return response.read()
 
@@ -92,7 +92,7 @@ class Updater:
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.state_path.write_text(json.dumps({"last_check": time.time()}), encoding="utf-8")
 
-    def check(self, *, force: bool = False) -> UpdateInfo | None:
+    def check(self, *, force: bool = False, current_version: str | None = None) -> UpdateInfo | None:
         if not self.repo:
             return None
         state = self._load_state()
@@ -105,7 +105,7 @@ class Updater:
             for item in data.get("assets", [])
             if isinstance(item, dict)
         }
-        required = ("manifest.json", "manifest.sig", "SCORPION_update.zip")
+        if current_version and not is_newer_version(str(data.get("tag_name") or "0"), current_version):\n            return None\n        required = ("manifest.json", "manifest.sig", "SCORPION_update.zip")
         if not all(assets.get(name) for name in required):
             raise UpdateVerificationError("GitHub Release enthält nicht alle signierten Update-Dateien.")
         return UpdateInfo(
