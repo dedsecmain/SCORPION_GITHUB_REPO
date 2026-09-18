@@ -52,7 +52,7 @@ jobs:
         id: vars
         shell: bash
         run: echo "tag=$(cat release/current.txt)" >> "$GITHUB_OUTPUT"
-      - name: Rebuild release assets from signed repository payload
+      - name: Build deterministic release assets
         env:
           TAG: ${{ steps.vars.outputs.tag }}
         shell: bash
@@ -62,13 +62,9 @@ jobs:
           test -f "release/$TAG/manifest.json"
           test -f "release/$TAG/manifest.sig.b64"
           test -f "release/$TAG/RELEASE_NOTES.md"
-          compgen -G "release/$TAG/payload/update.*.b64" >/dev/null
-          compgen -G "release/$TAG/payload/full.*.b64" >/dev/null
-          mkdir -p "release/$TAG/build"
-          cat "release/$TAG/payload/update."*.b64 | base64 -d > "release/$TAG/build/SCORPION_update.zip"
-          cat "release/$TAG/payload/full."*.b64 | base64 -d > "release/$TAG/build/SCORPION_MK22.zip"
+          PYTHONPATH=app/src python -m scorpion.release_builder             --app-root app             --out "release/$TAG/build"             --version "$TAG"
+          cmp "release/$TAG/build/manifest.json" "release/$TAG/manifest.json"
           base64 -d "release/$TAG/manifest.sig.b64" > "release/$TAG/build/manifest.sig"
-          cp "release/$TAG/manifest.json" "release/$TAG/build/manifest.json"
       - name: Verify signature, version and package hashes
         env:
           TAG: ${{ steps.vars.outputs.tag }}
