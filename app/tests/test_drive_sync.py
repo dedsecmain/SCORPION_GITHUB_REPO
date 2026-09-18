@@ -80,3 +80,19 @@ def test_memory_payload_has_fixed_safe_fields_only(tmp_path):
     payload = drive.uploads[0][1]
     forbidden = {"raw_screenshot", "audio", "token", "password", "cookie", "private_key"}
     assert forbidden.isdisjoint(payload)
+
+
+def test_secret_shaped_memory_is_blocked_before_drive_upload(tmp_path):
+    store = LongTermMemoryStore(tmp_path / "memory.json")
+    entry = store.add(
+        category="important_facts",
+        title="Temporary credential",
+        content="password=hunter2",
+        importance=5,
+        source="test",
+    )
+    drive = FakeDrive()
+    result = DriveSyncService(drive, store=store).sync(entry, approved=True)
+    assert result.status == "blocked_sensitive"
+    assert drive.uploads == []
+    assert store.get(entry.id).cloud_sync_state == "local_only"
