@@ -105,7 +105,9 @@ class Updater:
             for item in data.get("assets", [])
             if isinstance(item, dict)
         }
-        if current_version and not is_newer_version(str(data.get("tag_name") or "0"), current_version):\n            return None\n        required = ("manifest.json", "manifest.sig", "SCORPION_update.zip")
+        if current_version and not is_newer_version(str(data.get("tag_name") or "0"), current_version):
+            return None
+        required = ("manifest.json", "manifest.sig", "SCORPION_update.zip")
         if not all(assets.get(name) for name in required):
             raise UpdateVerificationError("GitHub Release enthält nicht alle signierten Update-Dateien.")
         return UpdateInfo(
