@@ -4,6 +4,7 @@ import os
 import subprocess
 import webbrowser
 from dataclasses import dataclass
+from collections.abc import Callable
 from typing import Literal
 
 from .action_policy import ActionPolicy, ActionRisk
@@ -184,3 +185,46 @@ def focus_windows_target(
             except Exception as exc:
                 return False, f"Konnte {target} nicht fokussieren: {exc}"
     return False, f"Kein offenes {target}-Fenster gefunden."
+
+
+def execute_preflighted_action(
+    preflight: ActionPreflight,
+    *,
+    confirm: Callable[[ActionPreflight], bool],
+    executor: Callable[[], tuple[bool, str]],
+    audit_log=None,
+) -> tuple[bool, str]:
+    """Execute only after policy preflight and any required fresh confirmation."""
+    if not preflight.allowed:
+        if audit_log is not None:
+            audit_log.record(
+                preflight.action,
+                preflight.target,
+                confirmation_required=preflight.requires_confirmation,
+                outcome="blocked",
+            )
+        return False, preflight.reason
+
+    if preflight.requires_confirmation and not bool(confirm(preflight)):
+        if audit_log is not None:
+            audit_log.record(
+                preflight.action,
+                preflight.target,
+                confirmation_required=True,
+                outcome="denied",
+            )
+        return False, "Aktion abgelehnt."
+
+    try:
+        ok, message = executor()
+    except Exception as exc:
+        ok, message = False, f"Aktion fehlgeschlagen: {exc}"
+
+    if audit_log is not None:
+        audit_log.record(
+            preflight.action,
+            preflight.target,
+            confirmation_required=preflight.requires_confirmation,
+            outcome="success" if ok else "failed",
+        )
+    return ok, message
