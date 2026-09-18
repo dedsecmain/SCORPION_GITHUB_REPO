@@ -34,6 +34,16 @@ jobs:
       - name: Run tests
         shell: pwsh
         run: python -m pytest -q
+      - name: Run MK22 self-check
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH = (Resolve-Path src)
+          python -m scorpion.selfcheck
+      - name: Build deterministic MK22 release candidate
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH = (Resolve-Path src)
+          python -m scorpion.release_builder --app-root . --out ../dist/mk22 --version v22.0.0
       - name: Validate release manifests exclude user data
         shell: pwsh
         run: |
