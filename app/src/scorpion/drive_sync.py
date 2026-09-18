@@ -40,7 +40,7 @@ class SyncResult:
 
 
 _SECRET_VALUE_RE = re.compile(
-    r"(?i)(?:password|passwd|token|api[_-]?key|cookie|private[_-]?key|client[_-]?secret|authorization)\\s*[:=]"
+    r"(?i)(?:password|passwd|token|api[_-]?key|cookie|private[_-]?key|client[_-]?secret|authorization)\s*[:=]"
 )
 _PEM_PRIVATE_KEY_RE = re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----", re.IGNORECASE)
 
