@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -38,6 +39,20 @@ class SyncResult:
     error: str | None = None
 
 
+_SECRET_VALUE_RE = re.compile(
+    r"(?i)(?:password|passwd|token|api[_-]?key|cookie|private[_-]?key|client[_-]?secret|authorization)\\s*[:=]"
+)
+_PEM_PRIVATE_KEY_RE = re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----", re.IGNORECASE)
+
+
+def _contains_sensitive_material(entry: MemoryEntry) -> bool:
+    for value in (entry.title, entry.content, entry.source, entry.project or ""):
+        text = str(value)
+        if _SECRET_VALUE_RE.search(text) or _PEM_PRIVATE_KEY_RE.search(text):
+            return True
+    return False
+
+
 class DriveSyncService:
     """Approval-gated sync for structured long-term memory entries only."""
 
@@ -71,6 +86,12 @@ class DriveSyncService:
     def sync(self, entry: MemoryEntry, *, approved: bool) -> SyncResult:
         if not approved:
             return SyncResult(entry_id=entry.id, status="not_approved")
+        if _contains_sensitive_material(entry):
+            return SyncResult(
+                entry_id=entry.id,
+                status="blocked_sensitive",
+                error="Memory entry contains secret-shaped material and was not uploaded.",
+            )
 
         payload = {field: getattr(entry, field) for field in self._SAFE_FIELDS}
         name = f"memory-{entry.id}.json"
