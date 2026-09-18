@@ -47,6 +47,11 @@ jobs:
           Write-Output "MK22_MANIFEST_BEGIN"
           Get-Content ../dist/mk22/manifest.json -Raw
           Write-Output "MK22_MANIFEST_END"
+          $built = Get-Content ../dist/mk22/manifest.json -Raw
+          $committed = Get-Content ../release/v22.0.0/manifest.json -Raw
+          if ($built -cne $committed) {
+            throw "Committed MK22 manifest does not match deterministic release build."
+          }
       - name: Upload MK22 release candidate
         uses: actions/upload-artifact@v4
         with:
