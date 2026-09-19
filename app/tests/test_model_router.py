@@ -78,3 +78,18 @@ def test_repeated_failures_demote_a_model_without_storing_content(tmp_path):
         "failures",
         "ema_latency_ms",
     }
+
+
+
+def test_quality_priority_uses_stronger_local_model(tmp_path):
+    router = make_router(tmp_path)
+    route = router.route(TaskKind.CHAT, complexity=0.3, priority="quality")
+    assert route.model == "qwen3:14b"
+    assert "Qualitätspriorität" in route.reason
+
+
+def test_speed_priority_uses_light_local_model(tmp_path):
+    router = make_router(tmp_path)
+    route = router.route(TaskKind.CHAT, complexity=0.2, priority="speed")
+    assert route.model == "gemma3:4b"
+    assert "Geschwindigkeitspriorität" in route.reason
