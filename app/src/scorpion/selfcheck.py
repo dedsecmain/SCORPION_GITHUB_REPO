@@ -14,9 +14,9 @@ def run_selfcheck() -> int:
     from .voice_state import VoiceSession
 
     settings = Settings.from_env()
-    if __version__ != "74.0.0":
+    if __version__ != "74.0.1":
         raise RuntimeError("MK74 version self-check failed")
-    if _version_tuple("v74.0.0") != (74, 0, 0):
+    if _version_tuple("v74.0.1") != (74, 0, 1):
         raise RuntimeError("Updater version parser self-check failed")
     if len(DEFAULT_PUBLIC_KEY_B64.strip()) < 40:
         raise RuntimeError("Release public key self-check failed")
