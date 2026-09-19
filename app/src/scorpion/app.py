@@ -457,7 +457,7 @@ def run_app() -> None:
     ctk.set_appearance_mode("dark")
 
     root = ctk.CTk(fg_color=THEME["bg"])
-    root.title("SCORPION MK47")
+    root.title("SCORPION MK50")
     root.geometry("1400x840")
     root.minsize(1120, 700)
     root.grid_columnconfigure(0, weight=0, minsize=185)
@@ -534,7 +534,7 @@ def run_app() -> None:
     ).pack(anchor="w", padx=16, pady=(24, 0))
     ctk.CTkLabel(
         rail,
-        text="MK47 · ADAPTIVE CORE",
+        text="MK50 · STABILITY CORE",
         font=ctk.CTkFont(size=10, weight="bold"),
         text_color=THEME["cyan"],
     ).pack(anchor="w", padx=16, pady=(2, 20))
