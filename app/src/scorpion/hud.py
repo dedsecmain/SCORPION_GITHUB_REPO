@@ -30,6 +30,8 @@ class SystemPanelModel:
     screen_context_label: str = "LOCAL CONTEXT OFF"
     intelligence_label: str = "GENERAL · AUTO"
     improvement_label: str = "IDEAS 0"
+    autonomy_label: str = "LOCAL-FIRST"
+    proactive_label: str = "NO SUGGESTION"
     mic_level: float = 0.0
 
     @classmethod
