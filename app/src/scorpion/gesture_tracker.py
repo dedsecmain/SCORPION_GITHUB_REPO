@@ -1,11 +1,48 @@
 from __future__ import annotations
 
 import math
+import os
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
+from urllib import request
 
 from .build_mode import BuildGesture, BuildGestureEvent
+
+
+HAND_MODEL_URL = (
+    "https://storage.googleapis.com/mediapipe-models/"
+    "hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
+)
+
+
+def ensure_hand_model(
+    path: str | Path | None = None,
+    *,
+    download_fn=None,
+) -> Path:
+    target = Path(path) if path is not None else (
+        Path.home() / ".scorpion" / "models" / "hand_landmarker.task"
+    )
+    if target.is_file() and target.stat().st_size > 1_000_000:
+        return target
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_suffix(".task.tmp")
+    downloader = download_fn or request.urlretrieve
+    try:
+        downloader(HAND_MODEL_URL, str(tmp))
+        if not tmp.is_file() or tmp.stat().st_size <= 1_000_000:
+            raise GestureTrackingUnavailable("Hand-Landmarker-Modell ist unvollständig.")
+        os.replace(tmp, target)
+    finally:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+    return target
 
 
 def _distance(a, b) -> float:
@@ -141,7 +178,8 @@ class WebcamGestureTracker:
 
     @staticmethod
     def _landmarks(hand_landmarks):
-        return [(float(point.x), float(point.y)) for point in hand_landmarks.landmark]
+        points = getattr(hand_landmarks, "landmark", hand_landmarks)
+        return [(float(point.x), float(point.y)) for point in points]
 
     def _run(self) -> None:
         cap = None
@@ -149,31 +187,44 @@ class WebcamGestureTracker:
         try:
             import cv2
             import mediapipe as mp
+            from mediapipe.tasks import python as mp_python
+            from mediapipe.tasks.python import vision
 
-            if not hasattr(mp, "solutions") or not hasattr(mp.solutions, "hands"):
-                raise GestureTrackingUnavailable("MediaPipe Hands API ist nicht verfügbar.")
+            if not hasattr(vision, "HandLandmarker"):
+                raise GestureTrackingUnavailable("MediaPipe HandLandmarker API ist nicht verfügbar.")
 
+            model_path = ensure_hand_model()
             cap = cv2.VideoCapture(self.camera_index)
             if not cap.isOpened():
                 raise GestureTrackingUnavailable("Webcam konnte für Build Mode nicht geöffnet werden.")
 
-            hands = mp.solutions.hands.Hands(
-                static_image_mode=False,
-                max_num_hands=2,
-                model_complexity=0,
-                min_detection_confidence=0.55,
+            options = vision.HandLandmarkerOptions(
+                base_options=mp_python.BaseOptions(model_asset_path=str(model_path)),
+                running_mode=vision.RunningMode.VIDEO,
+                num_hands=2,
+                min_hand_detection_confidence=0.55,
+                min_hand_presence_confidence=0.55,
                 min_tracking_confidence=0.55,
             )
+            hands = vision.HandLandmarker.create_from_options(options)
+            started = time.monotonic()
+            last_timestamp = -1
             while not self._stop.is_set():
                 ok, frame = cap.read()
                 if not ok:
                     time.sleep(0.08)
                     continue
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                result = hands.process(rgb)
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+                timestamp_ms = max(
+                    last_timestamp + 1,
+                    int((time.monotonic() - started) * 1000),
+                )
+                last_timestamp = timestamp_ms
+                result = hands.detect_for_video(mp_image, timestamp_ms)
                 landmarks = [
                     self._landmarks(item)
-                    for item in (result.multi_hand_landmarks or [])
+                    for item in (result.hand_landmarks or [])
                 ]
                 for event in self.interpreter.update(landmarks):
                     self.on_event(event)
@@ -191,3 +242,20 @@ class WebcamGestureTracker:
                     cap.release()
             except Exception:
                 pass
+
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Prepare Scorpion MK50 gesture tracking.")
+    parser.add_argument("--download-model", action="store_true")
+    args = parser.parse_args(argv)
+    if args.download_model:
+        path = ensure_hand_model()
+        print(path)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
