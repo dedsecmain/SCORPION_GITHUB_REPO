@@ -100,11 +100,20 @@ class OllamaLocalAI:
         image_bytes: bytes | None = None,
         *,
         model: str | None = None,
+        context=None,
+        memory_context: str | None = None,
     ) -> str:
         selected_model = model or self.model
         self._require_ready(selected_model)
         recent = list(history)[-self.history_limit :] if self.history_limit else []
-        messages: list[dict] = [{"role": "system", "content": build_persona(user_text)}]
+        messages: list[dict] = [{
+            "role": "system",
+            "content": build_persona(
+                user_text,
+                context=context,
+                memory_context=memory_context,
+            ),
+        }]
         for item in recent:
             role = item.get("role", "user")
             content = item.get("content", "")
