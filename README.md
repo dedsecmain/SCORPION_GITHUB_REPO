@@ -1,58 +1,63 @@
 # SCORPION AI
 
-Official update repository for **Scorpion MK47**, a Windows-first local-first AI assistant.
+Official update repository for **Scorpion MK50**, a Windows-first local-first AI assistant.
 
 ## Current release
 
-`v47.0.0`
+`v50.0.0`
 
-MK47 is the intelligence and comfort update after MK23. It keeps the signed local-first core while making Scorpion more context-aware, more consistent in High German, better at recalling relevant local memory and clearer about how it routes work.
+MK50 is the stability and Build Mode repair update after MK47. It keeps the MK47 context, memory and signed-update core while fixing the missing Build Mode implementation, strengthening Ollama resilience, keeping the wake listener alive through transient failures and enabling Windows autostart by default.
 
-## MK47 intelligence core
+## MK50 highlights
 
-- **Context Engine** detects domain, project, complexity, seriousness and response priority for each request.
-- **High German consistency** defaults normal answers to `de-DE` and locally retries clear English drift once when German was expected.
-- **Relevant Memory Recall** ranks local long-term memories by query overlap, importance and project context instead of dumping the full memory store into prompts.
-- **Context-aware Model Routing** can prioritize speed for casual work and stronger local models for technical or sensitive tasks.
-- **Improvement Advisor** stores local improvement proposals from repeated issues, but never applies or installs them automatically.
-- **Safety Normalizer** maps known read-only aliases to low-risk actions while unknown, mutating and critical actions still fail closed or require confirmation.
-- **HUD Intelligence Status** shows the detected context, recalled-memory count, selected local model and pending improvement ideas.
-- **Voice refinement** adds a High German command prompt to local Whisper transcription without sending microphone audio to cloud AI.
+- **Real Build Mode core** with deterministic object state for cube, sphere and panel objects.
+- **Local hand gestures** through MediaPipe Tasks Hand Landmarker:
+  - index pinch selects and drags
+  - two-hand pinch scales
+  - thumb + middle-finger motion rotates
+  - release drops the selected object
+- **Mouse fallback** for selection, drag, scale and rotation when camera or gesture tracking is unavailable.
+- **Voice launch** with “Scorpion, Build Mode” plus a dedicated HUD button.
+- **Ollama recovery** with bounded retries and exponential backoff for transient local connection failures.
+- **Wake listener recovery** after temporary microphone/VAD/Whisper errors instead of silently dying.
+- **Wakeword enabled by default** on application start.
+- **Windows autostart** through the current-user Startup folder, no admin rights required.
+- **Current MediaPipe 1.x Tasks API** and a locally cached official Hand Landmarker model.
+
+## Privacy
+
+Build Mode remains local-first:
+- webcam frames are processed in memory and are not intentionally written to disk;
+- the MediaPipe hand model is cached locally under `~/.scorpion/models/`;
+- direct OpenAI use remains approval-gated per request;
+- local memory, OAuth credentials, API keys and private signing keys are excluded from release packages.
 
 ## Update security
 
-Scorpion checks GitHub Releases for newer versions. Update payloads are downloaded only after installation confirmation and must pass:
+Scorpion checks GitHub Releases for newer versions. Installation still requires explicit confirmation and enforces:
 
 1. Ed25519 manifest signature verification
-2. release-version consistency checks
-3. update-package SHA-256 verification
+2. release-version consistency
+3. update ZIP SHA-256 verification
 4. per-file SHA-256 verification
-5. update-path allowlisting
+5. strict update-path allowlisting
 6. post-install self-check with rollback on failure
 
-The updater is pinned to `dedsecmain/SCORPION_GITHUB_REPO`.
-
-## Privacy and control
-
-- Relevant long-term memory is selected locally and is not automatically uploaded.
-- Improvement proposals are stored locally and have `auto_apply=false`.
-- No `.env`, OAuth credentials, API keys, local memory, adaptive-learning data, screenshots, microphone recordings or private signing keys belong in release packages.
-- Direct OpenAI API use remains opt-in per request.
-- App first-use trust and mutating/critical action confirmations remain enforced.
+The updater remains pinned to `dedsecmain/SCORPION_GITHUB_REPO`.
 
 ## Release assets
 
-Each MK47 release contains:
+Each MK50 release contains:
 
 ```text
 manifest.json
 manifest.sig
 SCORPION_update.zip
-SCORPION_MK47.zip
+SCORPION_MK50.zip
 ```
 
 The private Ed25519 release-signing key is never committed to this repository.
 
 ## Legacy bootstrap note
 
-The historical `SCORPION_MkIII.zip` contains an older placeholder updater key. That historical build cannot safely accept releases signed with the current release key until a one-time trusted key migration is performed. Signature verification is not bypassed to work around this.
+The historical `SCORPION_MkIII.zip` contains an older placeholder updater key. That historical build still needs the one-time trusted public-key migration before it can safely accept current signed releases.
