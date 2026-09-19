@@ -162,3 +162,27 @@ def test_capture_wake_segment_uses_vad_capture_settings(monkeypatch):
     monkeypatch.setattr(audio, "capture_until_silence", lambda **kwargs: calls.append(kwargs) or expected)
     assert audio.capture_wake_segment(onset_timeout=1.75) is expected
     assert calls == [{"onset_timeout": 1.75, "end_silence_ms": 450, "max_seconds": 3.5}]
+
+
+
+def test_command_transcription_carries_high_german_prompt(tmp_path):
+    captured = {}
+
+    class Segment:
+        text = " öffne github "
+
+    class FakeModel:
+        def transcribe(self, path, **kwargs):
+            captured.update(kwargs)
+            return [Segment()], object()
+
+    audio = LocalAudioService(
+        "base",
+        command_whisper_model="small",
+        whisper_factory=lambda _name: FakeModel(),
+        temp_dir=tmp_path,
+    )
+    source = tmp_path / "voice.wav"
+    source.write_bytes(b"x")
+    assert audio.transcribe_command(source) == "öffne github"
+    assert "Hochdeutscher Befehl" in captured["initial_prompt"]
