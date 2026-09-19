@@ -167,7 +167,7 @@ def focus_windows_target(
         return False, preflight.reason
 
     if os.name != "nt":
-        return False, "Fenstersteuerung ist in Scorpion MK47 für Windows gedacht."
+        return False, "Fenstersteuerung ist in Scorpion MK50 für Windows gedacht."
 
     try:
         import pygetwindow as gw
