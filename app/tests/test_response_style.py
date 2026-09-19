@@ -23,9 +23,9 @@ def test_work_tasks_use_focused_style():
     assert "wenig Smalltalk" in guidance
 
 
-def test_persona_embeds_mk23_tone_for_current_message():
+def test_persona_embeds_mk47_tone_for_current_message():
     prompt = build_persona("Bruder was geht heute?")
-    assert "Scorpion MK23" in prompt
+    assert "Scorpion MK47" in prompt
     assert "spielerisch" in prompt
     assert "Aktueller Reaktionsmodus: SIGNATURE" in prompt
 
