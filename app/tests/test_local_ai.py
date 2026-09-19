@@ -124,3 +124,51 @@ def test_mk47_system_prompt_includes_relevant_memory_context():
     assert "Scorpion MK47" in system_prompt
     assert "Hochdeutsch" in system_prompt
     assert "MK50: Ollama Stabilität verbessern." in system_prompt
+
+
+
+def test_ollama_transient_failure_recovers_without_cloud():
+    class FlakyTransport:
+        def __init__(self):
+            self.calls = 0
+
+        def __call__(self, method, url, payload=None, timeout=5.0):
+            self.calls += 1
+            if self.calls <= 2:
+                raise OSError("temporary connection reset")
+            if url.endswith("/api/tags"):
+                return {"models": [{"name": "gemma3:4b"}]}
+            return {"message": {"content": "wieder online"}}
+
+    transport = FlakyTransport()
+    ai = OllamaLocalAI(
+        "http://127.0.0.1:11434",
+        "gemma3:4b",
+        transport=transport,
+        retry_attempts=2,
+        retry_delay=0,
+    )
+    assert ai.status().state == "ready"
+    assert transport.calls == 3
+
+
+def test_ollama_retry_is_bounded_and_reports_offline():
+    class DeadTransport:
+        def __init__(self):
+            self.calls = 0
+
+        def __call__(self, method, url, payload=None, timeout=5.0):
+            self.calls += 1
+            raise TimeoutError("dead")
+
+    transport = DeadTransport()
+    ai = OllamaLocalAI(
+        "http://127.0.0.1:11434",
+        "gemma3:4b",
+        transport=transport,
+        retry_attempts=2,
+        retry_delay=0,
+    )
+    status = ai.status()
+    assert status.state == "offline"
+    assert transport.calls == 3
