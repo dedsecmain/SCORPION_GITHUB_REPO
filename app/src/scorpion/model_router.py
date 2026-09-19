@@ -52,9 +52,18 @@ class ModelRouter:
                 return model
         return None
 
-    def route(self, task: TaskKind, *, complexity: float = 0.5) -> ModelRoute:
+    def route(
+        self,
+        task: TaskKind,
+        *,
+        complexity: float = 0.5,
+        priority: str = "balanced",
+    ) -> ModelRoute:
         task = TaskKind(task)
         complexity = max(0.0, min(1.0, float(complexity)))
+        priority = str(priority or "balanced").strip().lower()
+        if priority not in {"speed", "balanced", "quality"}:
+            priority = "balanced"
 
         if task is TaskKind.COMMAND:
             return ModelRoute("deterministic", reason="Deterministischer lokaler Befehl")
@@ -67,12 +76,17 @@ class ModelRouter:
             model = self._first_installed_healthy(candidates)
             return ModelRoute("local", model=model, reason="Lokales Vision-Modell")
 
-        if task is TaskKind.REASONING and complexity >= 0.75:
+        if priority == "quality" or (task is TaskKind.REASONING and complexity >= 0.75):
             candidates = self.model_manager.role_candidates("text", "performance")
+            reason = "Qualitätspriorität · stärkeres lokales Text-Modell"
+        elif priority == "speed":
+            candidates = self.model_manager.role_candidates("text", "low")
+            reason = "Geschwindigkeitspriorität · leichtes lokales Text-Modell"
         else:
             candidates = self.model_manager.role_candidates("text", "balanced")
+            reason = "Ausgewogene lokale Modellroute"
         model = self._first_installed_healthy(candidates)
-        return ModelRoute("local", model=model, reason="Adaptives lokales Text-Modell")
+        return ModelRoute("local", model=model, reason=reason)
 
     def record_result(self, route: ModelRoute, *, latency_ms: float, success: bool) -> None:
         if route.provider != "local" or not route.model:
