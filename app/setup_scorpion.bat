@@ -3,7 +3,7 @@ setlocal
 cd /d %~dp0
 
 echo ==========================================
-echo SCORPION Mk III - Adaptive Core Setup
+echo SCORPION MK50 - Adaptive Core Setup
 echo ==========================================
 echo.
 
@@ -22,7 +22,7 @@ if %errorlevel%==0 (
 )
 
 if not exist .venv\Scripts\python.exe (
-  echo [1/4] Erstelle Python-Umgebung...
+  echo [1/5] Erstelle Python-Umgebung...
   %PY% -m venv .venv || goto :error
 ) else (
   echo [1/4] Python-Umgebung existiert bereits.
@@ -30,18 +30,24 @@ if not exist .venv\Scripts\python.exe (
 
 call .venv\Scripts\activate.bat || goto :error
 
-echo [2/4] Aktualisiere pip...
+echo [2/5] Aktualisiere pip...
 python -m pip install --upgrade pip || goto :error
 
-echo [3/4] Installiere Scorpion-Abhaengigkeiten...
+echo [3/5] Installiere Scorpion-Abhaengigkeiten...
 python -m pip install -r requirements.txt || goto :error
 
 if not exist .env copy .env.example .env
 
-echo [4/4] Basis-Setup abgeschlossen.
+echo [4/5] Basis-Setup abgeschlossen.
+echo [5/5] Registriere Windows-Autostart...
+set PYTHONPATH=%CD%\src
+python -m scorpion.autostart --app-root "%CD%"
+if errorlevel 1 (
+  echo [WARNUNG] Autostart konnte nicht eingerichtet werden. Scorpion selbst bleibt nutzbar.
+)
 echo.
 echo ==========================================
-echo SCORPION Mk III Setup fertig.
+echo SCORPION MK50 Setup fertig.
 echo ==========================================
 echo Standardmodus: LOCAL - kein OpenAI API-Key noetig.
 echo OPENAI_API_KEY ist optional und wird nur fuer einzeln bestaetigte Cloud-Anfragen benutzt.
@@ -53,12 +59,14 @@ echo Gute Startmodelle sind:
 echo   ollama pull gemma3:4b
 echo   ollama pull qwen3:8b
 echo.
-echo Der Wake-Listener nutzt lokale Whisper-Modelle und VAD.
+echo Der Wake-Listener ist in MK50 standardmaessig aktiv und erholt sich nach temporaeren Audiofehlern.
+echo Build Mode nutzt lokale Webcam-Handgesten via MediaPipe und hat einen Maus-Fallback.
 echo Beim ersten Einsatz koennen Whisper-Modelle lokal heruntergeladen werden.
 echo Das verbraucht keine OpenAI-API-Credits.
 echo.
-echo Updates via GitHub Releases bleiben deaktiviert, solange SCORPION_GITHUB_REPO leer ist.
+echo Der offizielle GitHub-Updatekanal ist vorkonfiguriert.
 echo Kein Update wird ohne deine Bestaetigung installiert.
+echo Scorpion startet nach dem Setup bei der Windows-Anmeldung automatisch.
 echo.
 echo Danach run_scorpion.bat starten.
 goto :done
