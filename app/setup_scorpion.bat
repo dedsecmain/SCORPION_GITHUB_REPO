@@ -25,7 +25,7 @@ if not exist .venv\Scripts\python.exe (
   echo [1/5] Erstelle Python-Umgebung...
   %PY% -m venv .venv || goto :error
 ) else (
-  echo [1/4] Python-Umgebung existiert bereits.
+  echo [1/5] Python-Umgebung existiert bereits.
 )
 
 call .venv\Scripts\activate.bat || goto :error
@@ -45,7 +45,6 @@ if errorlevel 1 (
   echo [WARNUNG] Gesture-Modell konnte nicht vorgeladen werden. Build Mode versucht es beim ersten Start erneut.
 )
 
-echo [4/5] Basis-Setup abgeschlossen.
 echo [5/5] Registriere Windows-Autostart...
 set PYTHONPATH=%CD%\src
 python -m scorpion.autostart --app-root "%CD%"
