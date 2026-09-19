@@ -28,7 +28,7 @@ def test_relevant_memory_prefers_matching_project_and_terms(tmp_path):
     store.add(
         category="projects",
         title="Scorpion Update",
-        content="MK50 behebt Ollama Stabilität und Wakeword Probleme",
+        content="MK74 behebt Ollama Stabilität und Wakeword Probleme",
         importance=5,
         source="test",
         project="scorpion",
@@ -51,12 +51,12 @@ def test_persona_uses_context_and_memory_without_leaving_german():
     prompt = build_persona(
         "Was war beim Scorpion Update geplant?",
         context=context,
-        memory_context="MK50: Ollama Stabilität verbessern.",
+        memory_context="MK74: Ollama Stabilität verbessern.",
     )
-    assert "Scorpion MK50" in prompt
+    assert "Scorpion MK74" in prompt
     assert "Hochdeutsch" in prompt
     assert "de-DE" in prompt
-    assert "MK50: Ollama Stabilität verbessern." in prompt
+    assert "MK74: Ollama Stabilität verbessern." in prompt
 
 
 def test_improvement_advisor_only_proposes_and_never_auto_applies(tmp_path):

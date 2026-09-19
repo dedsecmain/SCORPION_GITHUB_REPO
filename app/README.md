@@ -1,43 +1,34 @@
-# 🦂 SCORPION MK50
+# 🦂 SCORPION MK74
 
-Scorpion MK50 is the stability and Build Mode repair release built on the signed MK47 core.
+Scorpion MK74 builds on the signed MK50 stability core and adds a stricter autonomy model plus proactive intelligence.
 
-## Build Mode
+## Autonomy Policy
 
-MK50 replaces the earlier placeholder-style Build Mode with a real local workspace and state engine.
+MK74 separates actions into clear permission classes:
 
-Supported local manipulations:
-- index pinch: select and drag an object
-- two-hand pinch: scale the selected object
-- thumb + middle-finger motion: rotate the selected object
-- release: drop the current selection
-- mouse fallback: click/drag, mouse wheel scaling and right-drag rotation
+- local read-only observation: allowed locally
+- local computation and reasoning: allowed locally
+- cloud/API use: fresh explicit approval required
+- persistent or mutating changes: fresh explicit approval required
+- applying an update: fresh explicit approval required
 
-The workspace currently supports cube, sphere and panel primitives. Gesture input only changes the local virtual workspace. File deletion, security changes and other destructive OS actions remain outside Build Mode and keep their normal confirmation gates.
+Unknown or unsafe action classes remain blocked by default.
 
-Build Mode can be opened from the **🖐 BUILD MODE** button or by saying:
+## Proactive Engine
 
-```text
-Scorpion, Build Mode
-```
+Scorpion can now suggest a useful next move when context supports it. Examples include checking repeated local-AI failures, reviewing pending improvement ideas, filling a missing project-memory gap or showing a plan for a complex task.
 
-## MediaPipe hand tracking
+Suggestions are advice only. They use `auto_execute=false` and do not become permission to spend credits, change files or install updates.
 
-MK50 uses the current MediaPipe Tasks Hand Landmarker API. The official hand landmark model is cached locally under:
+## Personality and HUD
 
-```text
-~/.scorpion/models/hand_landmarker.task
-```
+MK74 keeps the Scorpion identity more consistent across casual and technical work. Serious and sensitive contexts still override playful behavior immediately.
 
-Setup tries to preload it. If that download fails, Build Mode tries again on first gesture start and still retains the mouse fallback.
+The Intelligence card now shows context, memory/model state, **LOCAL-FIRST**, and the current proactive suggestion. **🧭 NEXT MOVE** displays the suggestion with its permission boundary.
 
-## Ollama resilience
+## Existing MK50 capabilities
 
-Local Ollama calls use bounded retry with short exponential backoff for transient connection resets/timeouts. Retries stay local and never silently escalate to paid cloud AI.
-
-## Always-on wake listener
-
-The wake listener now defaults to enabled. A temporary microphone, VAD or Whisper failure puts the listener into a short **RECOVERING** state and then resumes listening instead of shutting itself down.
+Build Mode, local MediaPipe hand tracking, mouse fallback, Ollama retry/recovery, always-on wake defaults and Windows login autostart remain included.
 
 Wake acknowledgement remains:
 
@@ -45,21 +36,9 @@ Wake acknowledgement remains:
 Ja, Herr Rodriguez.
 ```
 
-The first-speech window remains **20 seconds** in MK50.
-
-## Windows autostart
-
-MK50 registers a current-user Startup launcher so Scorpion starts automatically at Windows login. It uses the local virtual environment and `pythonw.exe`, so no administrator permission is required.
-
-Set this to disable it:
-
-```text
-SCORPION_AUTOSTART_ENABLED=false
-```
-
 ## Safety and cloud rules
 
-Direct OpenAI API usage still needs one-time approval for every request. Build Mode does not grant arbitrary shell, file-deletion or security-changing privileges. Mutating and critical desktop actions keep their existing confirmation requirements.
+Direct OpenAI use remains one-request-only after approval. Scorpion may propose an update or improvement but cannot treat a proposal as permission to apply it. Critical and mutating desktop actions retain their existing confirmation requirements.
 
 ## Developer verification
 

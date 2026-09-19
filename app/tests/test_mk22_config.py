@@ -2,8 +2,8 @@ from scorpion import __version__
 from scorpion.config import Settings
 
 
-def test_mk50_version():
-    assert __version__ == "50.0.0"
+def test_mk74_version():
+    assert __version__ == "74.0.0"
 
 
 def test_default_natural_voice_is_high_german(monkeypatch):
@@ -14,7 +14,7 @@ def test_default_natural_voice_is_high_german(monkeypatch):
 
 
 
-def test_mk50_defaults_wake_and_autostart_on(monkeypatch):
+def test_mk74_defaults_wake_and_autostart_on(monkeypatch):
     monkeypatch.delenv("SCORPION_WAKE_LISTENER_ENABLED", raising=False)
     monkeypatch.delenv("SCORPION_AUTOSTART_ENABLED", raising=False)
     monkeypatch.delenv("SCORPION_BUILD_GESTURES_ENABLED", raising=False)
