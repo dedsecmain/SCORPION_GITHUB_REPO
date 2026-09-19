@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from scorpion.build_mode import BuildGesture, BuildGestureEvent, BuildModeSession
-from scorpion.gesture_tracker import GestureInterpreter
+from scorpion.gesture_tracker import GestureInterpreter, ensure_hand_model
 from scorpion.autostart import ensure_windows_autostart
 
 
@@ -122,11 +122,32 @@ def test_autostart_can_be_disabled_cleanly(tmp_path):
 
 
 
-def test_mediapipe_hands_backend_is_available():
+def test_mediapipe_tasks_hand_landmarker_backend_is_available():
     import mediapipe as mp
+    from mediapipe.tasks.python import vision
 
-    assert hasattr(mp, "solutions")
-    assert hasattr(mp.solutions, "hands")
+    assert hasattr(mp, "Image")
+    assert hasattr(mp, "ImageFormat")
+    assert hasattr(vision, "HandLandmarker")
+    assert hasattr(vision, "HandLandmarkerOptions")
+    assert hasattr(vision, "RunningMode")
+
+
+def test_hand_landmarker_model_is_cached_atomically(tmp_path):
+    target = tmp_path / "models" / "hand_landmarker.task"
+    calls = []
+
+    def fake_download(url, filename):
+        calls.append(url)
+        Path(filename).write_bytes(b"x" * 1_000_001)
+        return filename, None
+
+    first = ensure_hand_model(target, download_fn=fake_download)
+    second = ensure_hand_model(target, download_fn=fake_download)
+    assert first == target
+    assert second == target
+    assert len(calls) == 1
+    assert target.stat().st_size == 1_000_001
 
 
 def test_middle_finger_pinch_emits_rotation_after_motion():
