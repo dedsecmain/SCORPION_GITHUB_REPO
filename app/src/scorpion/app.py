@@ -15,6 +15,7 @@ from .actions import (
 from .adaptive import AdaptiveStore
 from .app_trust import AppTrustRegistry
 from .audit_log import AuditLog
+from .autonomy import AutonomyKind, AutonomyPolicy
 from .autostart import ensure_windows_autostart
 from .build_mode_ui import BuildModeWindow
 from .camera import CameraService
@@ -34,6 +35,7 @@ from .local_vision import LocalVision
 from .model_manager import ModelManager
 from .model_router import ModelRouter, TaskKind
 from .memory import ConversationMemory
+from .proactive_engine import ProactiveEngine
 from .long_term_memory import LongTermMemoryStore
 from .router import AssistantRouter, RouteStatus
 from .screen import ScreenService
@@ -70,6 +72,8 @@ class ScorpionController:
         self.improvement_advisor = ImprovementAdvisor(
             settings.adaptive_path.with_name("improvements.json")
         )
+        self.autonomy_policy = AutonomyPolicy()
+        self.proactive_engine = ProactiveEngine()
         self.hardware_profiler = hardware_profiler or HardwareProfiler()
         self.model_manager = model_manager or ModelManager()
 
@@ -129,6 +133,7 @@ class ScorpionController:
         self.last_route_reason = "AUTO"
         self._ollama_failures = 0
         self._language_mismatch_count = 0
+        self.last_proactive_suggestion = None
 
 
     def _auto_select_models(self) -> tuple[str, str]:
@@ -216,6 +221,12 @@ class ScorpionController:
             "route_model": self.last_route_model,
             "route_reason": self.last_route_reason,
             "improvements": len(self.improvement_advisor.pending()),
+            "autonomy": "LOCAL-FIRST",
+            "proactive": (
+                self.last_proactive_suggestion.title
+                if self.last_proactive_suggestion is not None
+                else "NO SUGGESTION"
+            ),
         }
 
     def _ask_local(self, text: str, image_bytes: bytes | None = None) -> str:
@@ -279,6 +290,13 @@ class ScorpionController:
         if result.status is RouteStatus.ESCALATION_REQUIRED and "ollama" in result.text.casefold():
             self._ollama_failures += 1
             self.improvement_advisor.diagnose(ollama_failures=self._ollama_failures)
+
+        self.last_proactive_suggestion = self.proactive_engine.suggest(
+            context=context,
+            memory_hits=len(memories),
+            local_failures=self._ollama_failures,
+            pending_improvements=len(self.improvement_advisor.pending()),
+        )
 
         try:
             if route.model:
@@ -369,7 +387,11 @@ class ScorpionController:
             return "OPENAI LOCKED 🔒 · Im LOCAL-Modus sind direkte OpenAI-API-Aufrufe gesperrt."
 
         token = self.cloud_gate.request_approval(reason)
-        if token is None:
+        decision = self.autonomy_policy.decide(
+            AutonomyKind.CLOUD,
+            approved=token is not None,
+        )
+        if not decision.allowed or token is None:
             return "OpenAI wurde für diese Anfrage nicht freigegeben. Es wurden keine API-Credits verwendet."
 
         try:
@@ -457,7 +479,7 @@ def run_app() -> None:
     ctk.set_appearance_mode("dark")
 
     root = ctk.CTk(fg_color=THEME["bg"])
-    root.title("SCORPION MK50")
+    root.title("SCORPION MK74")
     root.geometry("1400x840")
     root.minsize(1120, 700)
     root.grid_columnconfigure(0, weight=0, minsize=185)
@@ -692,7 +714,11 @@ def run_app() -> None:
         "autostart",
         THEME["success"] if autostart_status and autostart_status.enabled else THEME["muted"],
     )
-    status_card("INTELLIGENCE", "GENERAL · AUTO\nMEMORY 0 · IDEAS 0", "intelligence")
+    status_card(
+        "INTELLIGENCE",
+        "GENERAL · AUTO\nMEMORY 0 · IDEAS 0\nLOCAL-FIRST · NO SUGGESTION",
+        "intelligence",
+    )
     cloud_label = status_card("CLOUD GUARD", "OPENAI LOCKED 🔒", "cloud", THEME["success"])
     cloud_status_ref["label"] = cloud_label
     status_card("CORE UPDATE", "CHANNEL OFF" if not settings.github_repo else "UP TO DATE", "update", THEME["muted"])
@@ -788,7 +814,8 @@ def run_app() -> None:
         status = controller.intelligence_status()
         text = (
             f"{status['context']}\n"
-            f"MEMORY {status['memory_hits']} · {status['route_model']} · IDEAS {status['improvements']}"
+            f"MEMORY {status['memory_hits']} · {status['route_model']} · IDEAS {status['improvements']}\n"
+            f"{status['autonomy']} · {status['proactive']}"
         )
         status_refs["intelligence"].configure(text=text[:110])
 
@@ -1003,6 +1030,16 @@ def run_app() -> None:
 
         run_bg(work)
 
+    def show_proactive() -> None:
+        suggestion = controller.last_proactive_suggestion
+        if suggestion is None:
+            append_chat("SCORPION · NEXT MOVE", "Aktuell kein zusätzlicher Vorschlag. Die Lage ist sauber.")
+            return
+        append_chat(
+            "SCORPION · NEXT MOVE",
+            f"{suggestion.title}\n{suggestion.detail}\n\nKeine automatische Ausführung. Für Änderungen oder Cloud ist deine Freigabe nötig.",
+        )
+
     def show_improvements() -> None:
         items = controller.improvement_advisor.pending()
         if not items:
@@ -1084,7 +1121,11 @@ def run_app() -> None:
                     done.set()
                 root.after(0, confirm)
                 done.wait()
-                if not approved["value"]:
+                decision = controller.autonomy_policy.decide(
+                    AutonomyKind.APPLY_UPDATE,
+                    approved=approved["value"],
+                )
+                if not decision.allowed:
                     return
 
                 stage = Path(tempfile.mkdtemp(prefix="scorpion_update_stage_"))
@@ -1123,6 +1164,7 @@ def run_app() -> None:
     add_nav("⚡  OPENAI ONCE", on_cloud_once)
     add_nav("⬇  AI MODELS", install_selected_models)
     add_nav("↻  CHECK UPDATES", lambda: check_updates(automatic=False))
+    add_nav("🧭  NEXT MOVE", show_proactive)
     add_nav("💡  IMPROVEMENTS", show_improvements)
     add_nav("⌫  CLEAR MEMORY", clear_memory)
 
