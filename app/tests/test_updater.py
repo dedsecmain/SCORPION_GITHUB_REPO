@@ -119,3 +119,12 @@ def test_embedded_release_public_key_matches_repository_key():
         encoding="utf-8"
     ).strip()
     assert DEFAULT_PUBLIC_KEY_B64 == repo_key
+
+
+
+def test_mk47_is_newer_than_mk23_and_same_version_is_not_newer():
+    from scorpion.updater import is_newer_version
+
+    assert is_newer_version("v47.0.0", "23.0.0") is True
+    assert is_newer_version("v47.0.0", "47.0.0") is False
+    assert is_newer_version("v47.0.1", "47.0.0") is True
