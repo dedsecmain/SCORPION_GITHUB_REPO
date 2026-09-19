@@ -38,6 +38,13 @@ python -m pip install -r requirements.txt || goto :error
 
 if not exist .env copy .env.example .env
 
+echo [4/5] Bereite lokales Hand-Tracking-Modell vor...
+set PYTHONPATH=%CD%\src
+python -m scorpion.gesture_tracker --download-model
+if errorlevel 1 (
+  echo [WARNUNG] Gesture-Modell konnte nicht vorgeladen werden. Build Mode versucht es beim ersten Start erneut.
+)
+
 echo [4/5] Basis-Setup abgeschlossen.
 echo [5/5] Registriere Windows-Autostart...
 set PYTHONPATH=%CD%\src
