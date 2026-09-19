@@ -124,13 +124,22 @@ def test_autostart_can_be_disabled_cleanly(tmp_path):
 
 def test_mediapipe_tasks_hand_landmarker_backend_is_available():
     import mediapipe as mp
+    import numpy as np
+    from mediapipe.tasks import python as mp_python
     from mediapipe.tasks.python import vision
 
     assert hasattr(mp, "Image")
     assert hasattr(mp, "ImageFormat")
+    assert hasattr(mp_python, "BaseOptions")
     assert hasattr(vision, "HandLandmarker")
     assert hasattr(vision, "HandLandmarkerOptions")
     assert hasattr(vision, "RunningMode")
+    image = mp.Image(
+        image_format=mp.ImageFormat.SRGB,
+        data=np.zeros((2, 2, 3), dtype=np.uint8),
+    )
+    assert image.width == 2
+    assert image.height == 2
 
 
 def test_hand_landmarker_model_is_cached_atomically(tmp_path):
