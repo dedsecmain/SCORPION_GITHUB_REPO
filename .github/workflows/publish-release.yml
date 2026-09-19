@@ -58,7 +58,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$TAG" = "v23.0.0"
+          test "$TAG" = "v47.0.0"
           test -f "release/$TAG/manifest.json"
           test -f "release/$TAG/manifest.sig.b64"
           test -f "release/$TAG/RELEASE_NOTES.md"
@@ -81,7 +81,7 @@ jobs:
           build = root / "build"
           manifest_bytes = (build / "manifest.json").read_bytes()
           manifest = json.loads(manifest_bytes.decode("utf-8"))
-          if manifest.get("version") != tag or tag != "v23.0.0":
+          if manifest.get("version") != tag or tag != "v47.0.0":
               raise SystemExit("release version mismatch")
 
           public_key = base64.b64decode(Path("release/SCORPION_RELEASE_PUBLIC_KEY.txt").read_text().strip(), validate=True)
@@ -124,6 +124,6 @@ jobs:
             "release/$TAG/build/manifest.json#manifest.json" \
             "release/$TAG/build/manifest.sig#manifest.sig" \
             "release/$TAG/build/SCORPION_update.zip#SCORPION_update.zip" \
-            "release/$TAG/build/SCORPION_MK23.zip#SCORPION_MK23.zip" \
-            --title "Scorpion MK23 $TAG" \
+            "release/$TAG/build/SCORPION_MK47.zip#SCORPION_MK47.zip" \
+            --title "Scorpion MK47 $TAG" \
             --notes-file "release/$TAG/RELEASE_NOTES.md"
