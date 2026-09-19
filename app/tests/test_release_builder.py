@@ -9,8 +9,8 @@ from scorpion.release_builder import build_release
 def _fake_app(root: Path) -> Path:
     app = root / "app"
     (app / "src/scorpion").mkdir(parents=True)
-    (app / "src/scorpion/__init__.py").write_text('__version__ = "47.0.0"\n', encoding="utf-8")
-    (app / "src/scorpion/core.py").write_text("VALUE = 47\n", encoding="utf-8")
+    (app / "src/scorpion/__init__.py").write_text('__version__ = "50.0.0"\n', encoding="utf-8")
+    (app / "src/scorpion/core.py").write_text("VALUE = 50\n", encoding="utf-8")
     for name, content in {
         "requirements.txt": "pytest>=8\n",
         "pyproject.toml": "[project]\nname='scorpion'\n",
@@ -27,8 +27,8 @@ def _fake_app(root: Path) -> Path:
 
 def test_release_builder_is_deterministic_and_excludes_user_data(tmp_path):
     app = _fake_app(tmp_path)
-    first = build_release(app, tmp_path / "one", version="v47.0.0")
-    second = build_release(app, tmp_path / "two", version="v47.0.0")
+    first = build_release(app, tmp_path / "one", version="v50.0.0")
+    second = build_release(app, tmp_path / "two", version="v50.0.0")
 
     assert first.manifest_bytes == second.manifest_bytes
     assert first.update_zip.read_bytes() == second.update_zip.read_bytes()
@@ -49,10 +49,10 @@ def test_release_builder_is_deterministic_and_excludes_user_data(tmp_path):
 
 def test_manifest_hashes_match_update_zip(tmp_path):
     app = _fake_app(tmp_path)
-    result = build_release(app, tmp_path / "out", version="v47.0.0")
+    result = build_release(app, tmp_path / "out", version="v50.0.0")
     manifest = json.loads(result.manifest_bytes)
 
-    assert manifest["version"] == "v47.0.0"
+    assert manifest["version"] == "v50.0.0"
     assert manifest["package_sha256"] == hashlib.sha256(result.update_zip.read_bytes()).hexdigest()
 
     with zipfile.ZipFile(result.update_zip) as archive:

@@ -53,7 +53,7 @@ def test_persona_uses_context_and_memory_without_leaving_german():
         context=context,
         memory_context="MK50: Ollama Stabilität verbessern.",
     )
-    assert "Scorpion MK47" in prompt
+    assert "Scorpion MK50" in prompt
     assert "Hochdeutsch" in prompt
     assert "de-DE" in prompt
     assert "MK50: Ollama Stabilität verbessern." in prompt

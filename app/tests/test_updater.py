@@ -128,3 +128,12 @@ def test_mk47_is_newer_than_mk23_and_same_version_is_not_newer():
     assert is_newer_version("v47.0.0", "23.0.0") is True
     assert is_newer_version("v47.0.0", "47.0.0") is False
     assert is_newer_version("v47.0.1", "47.0.0") is True
+
+
+
+def test_mk50_is_newer_than_mk47_and_same_version_is_not_newer():
+    from scorpion.updater import is_newer_version
+
+    assert is_newer_version("v50.0.0", "47.0.0") is True
+    assert is_newer_version("v50.0.0", "50.0.0") is False
+    assert is_newer_version("v50.0.1", "50.0.0") is True

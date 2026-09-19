@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import time
 from dataclasses import dataclass
 from typing import Callable, Iterable
 from urllib import error, request
@@ -50,15 +51,37 @@ class OllamaLocalAI:
         transport: Transport | None = None,
         history_limit: int = 10,
         timeout: float = 60.0,
+        retry_attempts: int = 2,
+        retry_delay: float = 0.15,
+        sleep_fn=None,
     ):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.transport = transport or _urllib_transport
         self.history_limit = max(0, int(history_limit))
         self.timeout = timeout
+        self.retry_attempts = max(0, min(5, int(retry_attempts)))
+        self.retry_delay = max(0.0, float(retry_delay))
+        self._sleep = sleep_fn or time.sleep
+
+    def _request(self, method: str, url: str, payload: dict | None, timeout: float) -> dict:
+        last_error: Exception | None = None
+        for attempt in range(self.retry_attempts + 1):
+            try:
+                return self.transport(method, url, payload, timeout)
+            except (OllamaOfflineError, OSError, error.URLError, TimeoutError) as exc:
+                last_error = exc
+                if attempt >= self.retry_attempts:
+                    break
+                delay = self.retry_delay * (2 ** attempt)
+                if delay > 0:
+                    self._sleep(delay)
+        raise OllamaOfflineError(
+            f"Ollama ist nach {self.retry_attempts + 1} Versuchen nicht erreichbar: {last_error}"
+        ) from last_error
 
     def available_models(self) -> set[str]:
-        data = self.transport("GET", f"{self.base_url}/api/tags", None, 3.0)
+        data = self._request("GET", f"{self.base_url}/api/tags", None, 3.0)
         return {
             value
             for item in data.get("models", [])
@@ -68,8 +91,8 @@ class OllamaLocalAI:
 
     def status(self, model: str | None = None) -> LocalAIStatus:
         try:
-            data = self.transport("GET", f"{self.base_url}/api/tags", None, 3.0)
-        except (OllamaOfflineError, OSError, error.URLError, TimeoutError) as exc:
+            data = self._request("GET", f"{self.base_url}/api/tags", None, 3.0)
+        except OllamaOfflineError as exc:
             return LocalAIStatus("offline", f"Ollama ist offline oder nicht installiert. {exc}")
 
         model_names = {
@@ -127,9 +150,11 @@ class OllamaLocalAI:
 
         payload = {"model": selected_model, "messages": messages, "stream": False}
         try:
-            data = self.transport("POST", f"{self.base_url}/api/chat", payload, self.timeout)
-        except (OllamaOfflineError, OSError, error.URLError, TimeoutError) as exc:
-            raise OllamaOfflineError(f"Ollama-Verbindung ist während der Anfrage abgebrochen: {exc}") from exc
+            data = self._request("POST", f"{self.base_url}/api/chat", payload, self.timeout)
+        except OllamaOfflineError as exc:
+            raise OllamaOfflineError(
+                f"Ollama-Verbindung ist während der Anfrage abgebrochen: {exc}"
+            ) from exc
         content = data.get("message", {}).get("content", "")
         if not isinstance(content, str) or not content.strip():
             raise RuntimeError("Ollama hat keine Textantwort geliefert.")

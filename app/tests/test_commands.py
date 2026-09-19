@@ -27,3 +27,10 @@ def test_parses_focus_browser_command():
     command = parse_command("wechsel zum browser")
     assert command.kind is CommandKind.FOCUS_APP
     assert command.target == "browser"
+
+
+
+def test_parses_build_mode_command():
+    command = parse_command("Scorpion, Build Mode")
+    assert command.kind is CommandKind.BUILD_MODE
+    assert command.target == "build_mode"

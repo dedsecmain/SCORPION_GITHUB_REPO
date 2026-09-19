@@ -107,3 +107,36 @@ def test_wake_only_times_out_silently():
     time.sleep(0.03)
     listener.stop()
     assert heard == []
+
+
+
+def test_wake_listener_recovers_after_transient_audio_failure():
+    class FlakyAudio(FakeAudio):
+        def __init__(self):
+            super().__init__(transcripts=["Scorpion, status"])
+            self.record_attempts = 0
+
+        def record_wav(self, seconds: float):
+            self.record_attempts += 1
+            if self.record_attempts == 1:
+                raise OSError("temporary microphone failure")
+            return Path("recovered.wav")
+
+    heard = []
+    statuses = []
+    audio = FlakyAudio()
+    listener = ContinuousWakeListener(
+        audio=audio,
+        wake_word="Scorpion",
+        chunk_seconds=0.01,
+        on_command=lambda command, transcript: heard.append((command, transcript)),
+        on_status=statuses.append,
+        recovery_delay=0.01,
+        max_recovery_delay=0.02,
+    )
+    listener.start()
+    wait_until(lambda: bool(heard), timeout=1.0)
+    assert heard and heard[0][0] == "status"
+    assert any(status.startswith("RECOVERING") for status in statuses)
+    assert listener.running is True
+    listener.stop()

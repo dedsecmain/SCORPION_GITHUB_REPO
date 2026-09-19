@@ -15,6 +15,8 @@ from .actions import (
 from .adaptive import AdaptiveStore
 from .app_trust import AppTrustRegistry
 from .audit_log import AuditLog
+from .autostart import ensure_windows_autostart
+from .build_mode_ui import BuildModeWindow
 from .camera import CameraService
 from .cloud_ai import CloudAI, CloudUnavailableError
 from .cloud_gate import CloudApprovalError, CloudGate
@@ -327,6 +329,8 @@ class ScorpionController:
 
     def handle(self, text: str, image_bytes: bytes | None = None) -> str:
         command = parse_command(text)
+        if command.kind is CommandKind.BUILD_MODE:
+            return "BUILD MODE READY · Öffne den lokalen Workspace über die Desktop-Oberfläche."
         if command.kind is CommandKind.OPEN_APP and command.target:
             return self._run_app_action(
                 "open_app",
@@ -441,10 +445,19 @@ def run_app() -> None:
     from tkinter import messagebox
 
     settings = Settings.from_env()
+    install_root = Path(__file__).resolve().parents[2]
+    try:
+        autostart_status = ensure_windows_autostart(
+            install_root,
+            enabled=settings.autostart_enabled,
+        )
+    except Exception as exc:
+        autostart_status = None
+        print(f"Autostart konnte nicht aktualisiert werden: {exc}")
     ctk.set_appearance_mode("dark")
 
     root = ctk.CTk(fg_color=THEME["bg"])
-    root.title("SCORPION MK47")
+    root.title("SCORPION MK50")
     root.geometry("1400x840")
     root.minsize(1120, 700)
     root.grid_columnconfigure(0, weight=0, minsize=185)
@@ -506,6 +519,7 @@ def run_app() -> None:
     )
     updater = Updater(settings.github_repo)
     wake_listener: ContinuousWakeListener | None = None
+    build_mode_ref: dict[str, object | None] = {"window": None}
     voice_runtime = {"state": "STANDBY", "deadline": None}
 
     # Left navigation
@@ -520,7 +534,7 @@ def run_app() -> None:
     ).pack(anchor="w", padx=16, pady=(24, 0))
     ctk.CTkLabel(
         rail,
-        text="MK47 · ADAPTIVE CORE",
+        text="MK50 · STABILITY CORE",
         font=ctk.CTkFont(size=10, weight="bold"),
         text_color=THEME["cyan"],
     ).pack(anchor="w", padx=16, pady=(2, 20))
@@ -671,6 +685,13 @@ def run_app() -> None:
     status_card("HARDWARE", "CHECKING", "hardware")
     status_card("ACTIVE APP", "NO ACTIVE APP", "active_app")
     status_card("SCREEN CONTEXT", "LOCAL CONTEXT OFF", "screen_context", THEME["muted"])
+    status_card("BUILD MODE", "READY", "build_mode", THEME["cyan"])
+    status_card(
+        "AUTOSTART",
+        "ON" if autostart_status and autostart_status.enabled else "OFF",
+        "autostart",
+        THEME["success"] if autostart_status and autostart_status.enabled else THEME["muted"],
+    )
     status_card("INTELLIGENCE", "GENERAL · AUTO\nMEMORY 0 · IDEAS 0", "intelligence")
     cloud_label = status_card("CLOUD GUARD", "OPENAI LOCKED 🔒", "cloud", THEME["success"])
     cloud_status_ref["label"] = cloud_label
@@ -702,7 +723,7 @@ def run_app() -> None:
 
     append_chat(
         "SCORPION",
-        "MK47 Core online. Sag „Scorpion“. Ich antworte mit „Ja, Herr Rodriguez.“ und warte bis zu 20 Sekunden auf deinen Befehl.",
+        "MK50 Core online. Wakeword ist standardmäßig aktiv. Build Mode läuft lokal mit Handgesten und Maus-Fallback.",
     )
 
     def run_bg(fn) -> None:
@@ -801,9 +822,49 @@ def run_app() -> None:
             ),
         )
 
+    def on_build_mode_closed() -> None:
+        build_mode_ref["window"] = None
+        status_refs["build_mode"].configure(text="READY", text_color=THEME["cyan"])
+
+    def open_build_mode() -> None:
+        existing = build_mode_ref.get("window")
+        if existing is not None:
+            try:
+                if existing.window.winfo_exists():
+                    existing.window.lift()
+                    existing.window.focus_force()
+                    return
+            except Exception:
+                build_mode_ref["window"] = None
+        try:
+            workspace = BuildModeWindow(
+                root,
+                theme=THEME,
+                on_close=on_build_mode_closed,
+                gestures_enabled=settings.build_gestures_enabled,
+                camera_index=settings.build_camera_index,
+            )
+            build_mode_ref["window"] = workspace
+            status_refs["build_mode"].configure(text="ACTIVE", text_color=THEME["success"])
+            append_chat(
+                "SCORPION · BUILD MODE",
+                "Build Mode aktiv. Pinch greift und verschiebt, zwei Pinches skalieren, Daumen+Mittelfinger dreht. Maus-Fallback ist ebenfalls aktiv.",
+            )
+        except Exception as exc:
+            status_refs["build_mode"].configure(text="ERROR", text_color=THEME["danger"])
+            append_chat("SYSTEM", f"Build Mode konnte nicht gestartet werden: {exc}")
+
     def ask(text: str, image_bytes: bytes | None = None, speak: bool = True) -> None:
         text = text.strip()
         if not text:
+            return
+        parsed = parse_command(text)
+        if parsed.kind is CommandKind.BUILD_MODE:
+            append_chat("DU", text)
+            entry.delete(0, "end")
+            open_build_mode()
+            if speak:
+                run_bg(lambda: controller.audio.speak("Build Mode aktiviert."))
             return
         append_chat("DU", text)
         entry.delete(0, "end")
@@ -869,7 +930,15 @@ def run_app() -> None:
             root.after(0, lambda: ask(command))
 
     def on_wake_status(text: str) -> None:
-        if text == "OFF":
+        if text.startswith("RECOVERING"):
+            root.after(
+                0,
+                lambda: status_refs["voice"].configure(
+                    text="WAKE RECOVERING",
+                    text_color=THEME["orange"],
+                ),
+            )
+        elif text == "OFF":
             root.after(0, lambda: status_refs["voice"].configure(text="WAKE OFF"))
 
     def toggle_wake() -> None:
@@ -1044,7 +1113,8 @@ def run_app() -> None:
             text_color=THEME["text"],
         ).pack(fill="x", pady=4)
 
-    add_nav("◉  WAKE ON / OFF", toggle_wake, accent=True)
+    add_nav("🖐  BUILD MODE", open_build_mode, accent=True)
+    add_nav("◉  WAKE ON / OFF", toggle_wake)
     add_nav("🎙  LOCAL VOICE", on_mic)
     add_nav("▣  SCREEN VISION", on_screen)
     add_nav("◌  CAMERA", on_camera)
@@ -1080,6 +1150,12 @@ def run_app() -> None:
     def shutdown() -> None:
         if wake_listener:
             wake_listener.stop()
+        workspace = build_mode_ref.get("window")
+        if workspace is not None:
+            try:
+                workspace.close()
+            except Exception:
+                pass
         controller.screen_context.stop()
         root.destroy()
 
@@ -1091,7 +1167,7 @@ def run_app() -> None:
     if settings.screen_context_enabled:
         controller.screen_context.start(on_screen_context)
     if settings.wake_listener_enabled:
-        root.after(700, toggle_wake)
+        root.after(350, toggle_wake)
     if settings.github_repo:
         root.after(3500, lambda: check_updates(automatic=True))
     root.mainloop()

@@ -21,7 +21,7 @@ def test_mk1_config_defaults(monkeypatch):
     monkeypatch.delenv("SCORPION_REALTIME_MODEL", raising=False)
     settings = Settings.from_env()
     assert 1.0 <= settings.wake_listener_seconds <= 8.0
-    assert settings.wake_listener_enabled is False
+    assert settings.wake_listener_enabled is True
     assert settings.realtime_model.startswith("gpt-realtime")
 
 

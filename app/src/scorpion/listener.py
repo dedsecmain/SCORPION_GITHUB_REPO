@@ -29,6 +29,8 @@ class ContinuousWakeListener:
         end_silence_ms: int = 900,
         max_command_seconds: float = 30.0,
         aliases: set[str] | None = None,
+        recovery_delay: float = 0.35,
+        max_recovery_delay: float = 3.0,
     ):
         self.audio = audio
         self.wake_word = wake_word
@@ -41,6 +43,8 @@ class ContinuousWakeListener:
         self.max_command_seconds = float(max_command_seconds)
         self.matcher = WakeMatcher(wake_word, aliases=aliases)
         self.session = VoiceSession(wait_seconds=self.wait_seconds)
+        self.recovery_delay = max(0.01, float(recovery_delay))
+        self.max_recovery_delay = max(self.recovery_delay, float(max_recovery_delay))
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._assistant_speech_text = ""
@@ -190,31 +194,47 @@ class ContinuousWakeListener:
     def _run(self) -> None:
         self.session.reset()
         self._emit_state()
+        consecutive_errors = 0
         try:
             while not self._stop.is_set():
-                wake_capture = getattr(self.audio, "capture_wake_segment", None)
-                if wake_capture is not None:
-                    result = wake_capture(onset_timeout=self.chunk_seconds)
-                    if self._stop.is_set():
-                        break
-                    if not result.speech_detected or result.path is None:
-                        continue
-                    path = result.path
-                else:
-                    path = self.audio.record_wav(self.chunk_seconds)
-                    if self._stop.is_set():
-                        break
+                try:
+                    wake_capture = getattr(self.audio, "capture_wake_segment", None)
+                    if wake_capture is not None:
+                        result = wake_capture(onset_timeout=self.chunk_seconds)
+                        if self._stop.is_set():
+                            break
+                        if not result.speech_detected or result.path is None:
+                            consecutive_errors = 0
+                            continue
+                        path = result.path
+                    else:
+                        path = self.audio.record_wav(self.chunk_seconds)
+                        if self._stop.is_set():
+                            break
 
-                if self.session.state is VoiceState.SPEAKING:
-                    transcript = self._transcribe_command(path)
-                else:
-                    transcript = self._transcribe_wake(path)
-                if transcript:
-                    self._handle_transcript(transcript)
-                self._stop.wait(0.03)
-        except Exception as exc:
-            self.session.fail(str(exc))
-            self._emit_state()
+                    if self.session.state is VoiceState.SPEAKING:
+                        transcript = self._transcribe_command(path)
+                    else:
+                        transcript = self._transcribe_wake(path)
+                    if transcript:
+                        self._handle_transcript(transcript)
+                    consecutive_errors = 0
+                    self._stop.wait(0.03)
+                except Exception as exc:
+                    if self._stop.is_set():
+                        break
+                    consecutive_errors += 1
+                    self.session.fail(str(exc))
+                    self._emit_state()
+                    self.on_status(f"RECOVERING · {exc}")
+                    delay = min(
+                        self.max_recovery_delay,
+                        self.recovery_delay * (2 ** min(consecutive_errors - 1, 4)),
+                    )
+                    if self._stop.wait(delay):
+                        break
+                    self.session.reset()
+                    self._emit_state()
         finally:
             self._stop.set()
             self.on_status("OFF")
