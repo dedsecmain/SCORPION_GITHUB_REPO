@@ -10,6 +10,7 @@ class CommandKind(str, Enum):
     FOCUS_APP = "focus_app"
     CAMERA = "camera"
     SCREEN = "screen"
+    BUILD_MODE = "build_mode"
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,10 @@ def _target_from_text(text: str) -> str | None:
 
 def parse_command(text: str) -> ParsedCommand:
     t = " ".join(text.lower().strip().split())
+
+    build_terms = ("build mode", "build-mode", "buildmodus", "bau modus", "baumodus")
+    if any(term in t for term in build_terms):
+        return ParsedCommand(CommandKind.BUILD_MODE, "build_mode")
 
     screen_terms = ("bildschirm", "screen", "desktop", "monitor")
     screen_verbs = ("was ist", "was siehst", "zeig", "analys", "schau", "sieh")
