@@ -1,91 +1,76 @@
-# 🦂 SCORPION MK23
+# 🦂 SCORPION MK47
 
-Scorpion MK23 is a focused personality and response-style upgrade on top of the MK22 local-first desktop core.
+Scorpion MK47 is the intelligence and comfort upgrade built on the signed MK23 desktop core.
 
-## MK23 personality core
+## Context Engine
 
-Each local text request is classified into a response style before it reaches the local model:
+Every local request receives a compact situation profile before model routing:
 
-- **SIGNATURE**: confident, relaxed, playful, slightly cheeky, with light street flavor and no forced slang.
-- **FOCUSED**: precise, direct and low on small talk for coding, GitHub, updates, debugging and project work.
-- **SERIOUS**: calm and respectful with no jokes for health, emergencies, safety and sensitive situations.
+- response language, defaulting to High German
+- general, technical or sensitive domain
+- recognized project such as Scorpion or Playbox
+- speed or quality priority
+- bounded complexity score
+- serious-mode override when safety or sensitive context requires it
 
-Safety, truthfulness, privacy and confirmation rules always outrank personality styling.
+The profile changes how Scorpion works, not just how she sounds.
 
-## Voice core
+## High German consistency
 
-Wakeword: **Scorpion**
+Normal Scorpion answers default to **Hochdeutsch (de-DE)**. An explicit request for another language can override this. If a German request returns a clearly English local-model answer, MK47 records the mismatch locally and attempts one local retry with an explicit High German instruction.
 
-Acknowledgement:
+## Relevant Memory Recall
+
+Structured long-term memory remains local-first. MK47 can retrieve a small, relevance-ranked set of entries using:
+
+- overlap with the current request
+- title matches
+- memory importance
+- matching project context
+
+Only the selected bounded context is passed to the local model. The full memory store is not dumped into every request.
+
+## Smarter local model routing
+
+The MK47 context priority feeds the existing hardware-aware model router:
+
+- **speed** can prefer a lighter installed local text model
+- **balanced** keeps the normal route
+- **quality** can prefer a stronger installed local text model
+
+Repeated model failures can still demote an unhealthy model. Direct cloud AI remains confirmation-gated.
+
+## Improvement Advisor
+
+Scorpion can record local proposals when repeated issues are detected, such as language drift or repeated Ollama failures. Proposals are visible from the **IMPROVEMENTS** HUD/navigation entry.
+
+Improvement proposals are suggestions only. They are stored with `auto_apply=false`; MK47 does not silently install, patch or deploy its own updates.
+
+## HUD and voice refinements
+
+The HUD now includes an **INTELLIGENCE** status showing current context, recalled-memory count, selected model and number of open improvement ideas.
+
+Local command transcription receives a High German vocabulary/context hint for Scorpion, GitHub, Ollama and update-related commands. Wakeword acknowledgement remains:
 
 ```text
 Ja, Herr Rodriguez.
 ```
 
-If the wake phrase already includes a command, Scorpion processes it immediately after the acknowledgement. If you only say `Scorpion`, the first-speech window stays open for up to **20 seconds**. Barge-in lets new user speech interrupt Scorpion's own answer and return to listening.
+The first-speech window remains up to **20 seconds** in MK47. Wakeword-always-on and larger stability changes remain separate MK50 work.
 
-The default natural voice remains `de-DE-KatjaNeural` with a slightly reduced speaking rate. Edge TTS does not use OpenAI credits. For fully offline speech output, set:
+## Safety normalization
 
-```text
-SCORPION_NATURAL_VOICE_ENABLED=false
-```
-
-## Install
-
-Use a short Windows path such as:
-
-```text
-C:\Scorpion
-```
-
-Run:
-
-```text
-setup_scorpion.bat
-run_scorpion.bat
-```
-
-## Local AI
-
-Ollama is used for local text and vision models. MK23 keeps hardware-aware routing from MK22. Small deterministic commands do not need an LLM. More complex reasoning may use a stronger installed text model, while screen/image tasks use an installed vision-capable model.
-
-Model downloads never happen silently. Scorpion asks before running any `ollama pull`.
-
-## Long-term memory and Drive
-
-Structured long-term memory remains local-first and separate from rolling conversation history. Google Drive sync is disabled by default and only explicitly approved structured memory entries or project blocks are eligible for upload. Raw screenshots, audio, tokens, passwords, cookies, private keys and arbitrary filesystem paths are not Drive-sync payloads.
-
-## Screen context and app trust
-
-Scorpion can observe local window metadata such as the active application and visible window titles. Pixel capture is ephemeral and used only when local screen analysis needs it. Screen images are not retained by the background monitor and are not sent to cloud AI automatically.
-
-Known low-risk app actions require explicit trust. New apps need first-use approval. Mutating and critical actions require a fresh confirmation.
-
-## ChatGPT and OpenAI
-
-`ASK CHATGPT` prepares a handoff prompt and opens ChatGPT without spending Scorpion's OpenAI API credits.
-
-Direct OpenAI API use remains optional. LOCAL mode blocks it. HYBRID/CLOUD still require a fresh one-time approval for each direct API request that may consume credits.
+Known read-only aliases such as status checks, screen inspection, file listing/read and update checks are normalized as low-risk actions. Unknown actions still fail closed. Mutating and critical actions still require confirmation.
 
 ## Signed updates
 
-The official update channel defaults to:
+The official update channel remains:
 
 ```text
 dedsecmain/SCORPION_GITHUB_REPO
 ```
 
-MK22 and newer installations compare semantic versions, so `v23.0.0` is recognized as an update. Installation still requires explicit confirmation and then enforces:
-
-1. Ed25519 manifest signature verification
-2. release-version consistency
-3. update ZIP SHA-256 verification
-4. per-file SHA-256 verification
-5. strict update-path allowlisting
-6. post-install self-check
-7. automatic rollback on self-check failure
-
-`.env`, local memory, adaptive data, credentials and model caches are not valid update targets.
+MK23 recognizes `v47.0.0` as a newer semantic version. Installation still requires explicit confirmation and enforces Ed25519 signature verification, package/file hashes, path allowlisting, post-install self-check and rollback.
 
 ## Developer verification
 

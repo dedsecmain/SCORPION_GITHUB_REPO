@@ -10,6 +10,15 @@ class ActionRisk(str, Enum):
 
 
 class ActionPolicy:
+    ALIASES = {
+        "show_status": "read_state",
+        "check_status": "read_state",
+        "inspect_screen": "read_state",
+        "show_screen": "read_state",
+        "list_files": "read_state",
+        "read_file": "read_state",
+        "check_updates": "read_state",
+    }
     LOW_RISK = {
         "focus_window",
         "scroll",
@@ -38,6 +47,7 @@ class ActionPolicy:
     def classify(self, action: str, target: str | None = None) -> ActionRisk:
         _ = target
         normalized = str(action).strip().lower()
+        normalized = self.ALIASES.get(normalized, normalized)
         if normalized in self.LOW_RISK:
             return ActionRisk.LOW
         if normalized in self.MUTATING:

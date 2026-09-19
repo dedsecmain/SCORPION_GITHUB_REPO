@@ -20,8 +20,10 @@ from .cloud_ai import CloudAI, CloudUnavailableError
 from .cloud_gate import CloudApprovalError, CloudGate
 from .commands import CommandKind, parse_command
 from .config import Mode, Settings
+from .context_engine import analyze_context
 from .handoff import ChatGPTHandoff, HandoffResult
 from .hud import THEME, SystemPanelModel, VoiceVisualState
+from .improvement_advisor import ImprovementAdvisor
 from .hardware import HardwareProfiler
 from .listener import ContinuousWakeListener
 from .local_ai import OllamaLocalAI
@@ -63,6 +65,9 @@ class ScorpionController:
         self.long_term_memory = LongTermMemoryStore(settings.long_term_memory_path)
         self.hardware_profile = None
         self.adaptive = adaptive_store or AdaptiveStore(settings.adaptive_path)
+        self.improvement_advisor = ImprovementAdvisor(
+            settings.adaptive_path.with_name("improvements.json")
+        )
         self.hardware_profiler = hardware_profiler or HardwareProfiler()
         self.model_manager = model_manager or ModelManager()
 
@@ -116,6 +121,12 @@ class ScorpionController:
         self.local_vision = LocalVision(self.local_ai, model=self.vision_model)
         self.last_user_text = ""
         self.last_image_bytes: bytes | None = None
+        self.last_context = analyze_context("")
+        self.last_memory_hits = 0
+        self.last_route_model = "AUTO"
+        self.last_route_reason = "AUTO"
+        self._ollama_failures = 0
+        self._language_mismatch_count = 0
 
 
     def _auto_select_models(self) -> tuple[str, str]:
@@ -171,22 +182,102 @@ class ScorpionController:
             score += 0.35
         return max(0.0, min(1.0, score))
 
+    @staticmethod
+    def _looks_like_english(text: str) -> bool:
+        words = {word.strip(".,!?;:()[]{}\"'").casefold() for word in str(text).split()}
+        english = len(words & {
+            "the", "and", "you", "your", "this", "that", "with", "from",
+            "are", "is", "to", "of", "for", "can", "will",
+        })
+        german = len(words & {
+            "der", "die", "das", "und", "du", "dein", "ist", "sind", "mit",
+            "von", "für", "ich", "nicht", "kann", "wird", "auf",
+        })
+        return english >= 5 and english >= german + 3
+
+    @staticmethod
+    def _format_memory_context(entries) -> str:
+        parts: list[str] = []
+        size = 0
+        for item in entries:
+            line = f"- [{item.category}] {item.title}: {item.content}".strip()
+            if size + len(line) > 1600:
+                break
+            parts.append(line)
+            size += len(line)
+        return "\n".join(parts)
+
+    def intelligence_status(self) -> dict[str, object]:
+        return {
+            "context": self.last_context.label,
+            "memory_hits": self.last_memory_hits,
+            "route_model": self.last_route_model,
+            "route_reason": self.last_route_reason,
+            "improvements": len(self.improvement_advisor.pending()),
+        }
+
     def _ask_local(self, text: str, image_bytes: bytes | None = None) -> str:
         self.last_user_text = text
         self.last_image_bytes = image_bytes
-        complexity = self._task_complexity(text)
+        history = self.memory.messages()
+        context = analyze_context(text, history)
+        memories = self.long_term_memory.relevant(
+            text,
+            limit=4,
+            project=context.project,
+        )
+        memory_context = self._format_memory_context(memories)
+        complexity = max(self._task_complexity(text), context.complexity)
         kind = TaskKind.VISION if image_bytes is not None else (
             TaskKind.REASONING if complexity >= 0.75 else TaskKind.CHAT
         )
-        route = self.model_router.route(kind, complexity=complexity)
-        selected_model = route.model or (self.vision_model if image_bytes is not None else self.text_model)
+        route = self.model_router.route(
+            kind,
+            complexity=complexity,
+            priority=context.priority,
+        )
+        selected_model = route.model or (
+            self.vision_model if image_bytes is not None else self.text_model
+        )
+        self.last_context = context
+        self.last_memory_hits = len(memories)
+        self.last_route_model = selected_model or "AUTO"
+        self.last_route_reason = route.reason
+
         started = time.monotonic()
         result = self.router.handle_local(
             text,
-            history=self.memory.messages(),
+            history=history,
             image_bytes=image_bytes,
             model=selected_model,
+            context=context,
+            memory_context=memory_context,
         )
+
+        if (
+            result.status is RouteStatus.ANSWER
+            and context.response_language == "de-DE"
+            and self._looks_like_english(result.text)
+        ):
+            self._language_mismatch_count += 1
+            self.improvement_advisor.diagnose(
+                language_mismatch_count=self._language_mismatch_count,
+            )
+            retry = self.router.handle_local(
+                "Antworte ausschließlich auf Hochdeutsch. " + text,
+                history=history,
+                image_bytes=image_bytes,
+                model=selected_model,
+                context=context,
+                memory_context=memory_context,
+            )
+            if retry.status is RouteStatus.ANSWER and not self._looks_like_english(retry.text):
+                result = retry
+
+        if result.status is RouteStatus.ESCALATION_REQUIRED and "ollama" in result.text.casefold():
+            self._ollama_failures += 1
+            self.improvement_advisor.diagnose(ollama_failures=self._ollama_failures)
+
         try:
             if route.model:
                 self.model_router.record_result(
@@ -353,7 +444,7 @@ def run_app() -> None:
     ctk.set_appearance_mode("dark")
 
     root = ctk.CTk(fg_color=THEME["bg"])
-    root.title("SCORPION MK23")
+    root.title("SCORPION MK47")
     root.geometry("1400x840")
     root.minsize(1120, 700)
     root.grid_columnconfigure(0, weight=0, minsize=185)
@@ -429,7 +520,7 @@ def run_app() -> None:
     ).pack(anchor="w", padx=16, pady=(24, 0))
     ctk.CTkLabel(
         rail,
-        text="MK23 · ADAPTIVE CORE",
+        text="MK47 · ADAPTIVE CORE",
         font=ctk.CTkFont(size=10, weight="bold"),
         text_color=THEME["cyan"],
     ).pack(anchor="w", padx=16, pady=(2, 20))
@@ -580,6 +671,7 @@ def run_app() -> None:
     status_card("HARDWARE", "CHECKING", "hardware")
     status_card("ACTIVE APP", "NO ACTIVE APP", "active_app")
     status_card("SCREEN CONTEXT", "LOCAL CONTEXT OFF", "screen_context", THEME["muted"])
+    status_card("INTELLIGENCE", "GENERAL · AUTO\nMEMORY 0 · IDEAS 0", "intelligence")
     cloud_label = status_card("CLOUD GUARD", "OPENAI LOCKED 🔒", "cloud", THEME["success"])
     cloud_status_ref["label"] = cloud_label
     status_card("CORE UPDATE", "CHANNEL OFF" if not settings.github_repo else "UP TO DATE", "update", THEME["muted"])
@@ -610,7 +702,7 @@ def run_app() -> None:
 
     append_chat(
         "SCORPION",
-        "MK23 Core online. Sag „Scorpion“. Ich antworte mit „Ja, Herr Rodriguez.“ und warte bis zu 20 Sekunden auf deinen Befehl.",
+        "MK47 Core online. Sag „Scorpion“. Ich antworte mit „Ja, Herr Rodriguez.“ und warte bis zu 20 Sekunden auf deinen Befehl.",
     )
 
     def run_bg(fn) -> None:
@@ -671,6 +763,14 @@ def run_app() -> None:
 
         root.after(0, update)
 
+    def refresh_intelligence() -> None:
+        status = controller.intelligence_status()
+        text = (
+            f"{status['context']}\n"
+            f"MEMORY {status['memory_hits']} · {status['route_model']} · IDEAS {status['improvements']}"
+        )
+        status_refs["intelligence"].configure(text=text[:110])
+
     def refresh_status() -> None:
         def work() -> None:
             try:
@@ -686,6 +786,7 @@ def run_app() -> None:
             root.after(0, lambda: status_refs["ollama"].configure(text=ollama[:50]))
             root.after(0, lambda: status_refs["speech"].configure(text=speech[:50]))
             root.after(0, lambda: status_refs["hardware"].configure(text=hardware[:58]))
+            root.after(0, refresh_intelligence)
 
         run_bg(work)
 
@@ -715,6 +816,7 @@ def run_app() -> None:
                 traceback.print_exc()
                 answer = f"Fehler: {exc}"
             root.after(0, lambda: append_chat("SCORPION", answer))
+            root.after(0, refresh_intelligence)
             if speak and answer and not answer.startswith("Fehler:"):
                 on_voice_state("SPEAKING")
                 controller.audio.speak(answer)
@@ -832,6 +934,21 @@ def run_app() -> None:
 
         run_bg(work)
 
+    def show_improvements() -> None:
+        items = controller.improvement_advisor.pending()
+        if not items:
+            append_chat("SCORPION · IDEEN", "Aktuell keine offenen Verbesserungsvorschläge.")
+            return
+        lines = [
+            f"• {item.title} [{item.area}]\n  {item.detail}"
+            for item in items[:8]
+        ]
+        append_chat(
+            "SCORPION · IDEEN",
+            "\n\n".join(lines)
+            + "\n\nVorschläge werden nie automatisch angewendet.",
+        )
+
     def clear_memory() -> None:
         controller.memory.clear()
         append_chat("SYSTEM", "Lokales Gesprächs-Memory geleert.")
@@ -936,6 +1053,7 @@ def run_app() -> None:
     add_nav("⚡  OPENAI ONCE", on_cloud_once)
     add_nav("⬇  AI MODELS", install_selected_models)
     add_nav("↻  CHECK UPDATES", lambda: check_updates(automatic=False))
+    add_nav("💡  IMPROVEMENTS", show_improvements)
     add_nav("⌫  CLEAR MEMORY", clear_memory)
 
     ctk.CTkButton(

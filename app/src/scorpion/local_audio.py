@@ -181,7 +181,15 @@ class LocalAudioService:
         )
 
     def transcribe_command(self, path: Path) -> str:
-        return self._transcribe_with(path, self.command_whisper_model, beam_size=5)
+        return self._transcribe_with(
+            path,
+            self.command_whisper_model,
+            beam_size=5,
+            initial_prompt=(
+                "Hochdeutscher Befehl an Scorpion. Antworte und erkenne bevorzugt deutsches Hochdeutsch. "
+                "Scorpion. Herr Rodriguez. GitHub. Ollama. Update."
+            ),
+        )
 
     def capture_wake_segment(self, *, onset_timeout: float = 2.0) -> SpeechCaptureResult:
         return self.capture_until_silence(

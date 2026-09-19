@@ -1,22 +1,23 @@
 # SCORPION AI
 
-Official update repository for **Scorpion MK23**, a Windows-first local-first AI assistant.
+Official update repository for **Scorpion MK47**, a Windows-first local-first AI assistant.
 
 ## Current release
 
-`v23.0.0`
+`v47.0.0`
 
-MK23 is the focused personality update after MK22. It keeps the MK22 voice, memory, local vision, trusted-app controls and signed updater, while adding a situational response-style engine.
+MK47 is the intelligence and comfort update after MK23. It keeps the signed local-first core while making Scorpion more context-aware, more consistent in High German, better at recalling relevant local memory and clearer about how it routes work.
 
-## MK23 personality core
+## MK47 intelligence core
 
-Scorpion now selects one of three local response modes for each request:
-
-- **SIGNATURE** for normal conversation: confident, relaxed, playful and occasionally cheeky without forced slang.
-- **FOCUSED** for coding, GitHub, update and technical work: direct, precise and low on small talk.
-- **SERIOUS** for health, emergencies, safety and other sensitive topics: calm, clear and no jokes.
-
-The mode only changes response style. It does not weaken truthfulness, privacy, confirmation gates or cloud restrictions.
+- **Context Engine** detects domain, project, complexity, seriousness and response priority for each request.
+- **High German consistency** defaults normal answers to `de-DE` and locally retries clear English drift once when German was expected.
+- **Relevant Memory Recall** ranks local long-term memories by query overlap, importance and project context instead of dumping the full memory store into prompts.
+- **Context-aware Model Routing** can prioritize speed for casual work and stronger local models for technical or sensitive tasks.
+- **Improvement Advisor** stores local improvement proposals from repeated issues, but never applies or installs them automatically.
+- **Safety Normalizer** maps known read-only aliases to low-risk actions while unknown, mutating and critical actions still fail closed or require confirmation.
+- **HUD Intelligence Status** shows the detected context, recalled-memory count, selected local model and pending improvement ideas.
+- **Voice refinement** adds a High German command prompt to local Whisper transcription without sending microphone audio to cloud AI.
 
 ## Update security
 
@@ -31,23 +32,23 @@ Scorpion checks GitHub Releases for newer versions. Update payloads are download
 
 The updater is pinned to `dedsecmain/SCORPION_GITHUB_REPO`.
 
-## Privacy
+## Privacy and control
 
+- Relevant long-term memory is selected locally and is not automatically uploaded.
+- Improvement proposals are stored locally and have `auto_apply=false`.
 - No `.env`, OAuth credentials, API keys, local memory, adaptive-learning data, screenshots, microphone recordings or private signing keys belong in release packages.
-- Google Drive sync remains approval-gated for structured memory data.
-- Background screen context remains local and does not retain screenshots by default.
-- Direct OpenAI use remains opt-in per request.
-- App first-use trust and action-risk confirmations remain enforced.
+- Direct OpenAI API use remains opt-in per request.
+- App first-use trust and mutating/critical action confirmations remain enforced.
 
 ## Release assets
 
-Each MK23 release contains:
+Each MK47 release contains:
 
 ```text
 manifest.json
 manifest.sig
 SCORPION_update.zip
-SCORPION_MK23.zip
+SCORPION_MK47.zip
 ```
 
 The private Ed25519 release-signing key is never committed to this repository.

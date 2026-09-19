@@ -28,6 +28,8 @@ class SystemPanelModel:
     cloud_label: str = "OPENAI LOCKED 🔒"
     active_app_label: str = "NO ACTIVE APP"
     screen_context_label: str = "LOCAL CONTEXT OFF"
+    intelligence_label: str = "GENERAL · AUTO"
+    improvement_label: str = "IDEAS 0"
     mic_level: float = 0.0
 
     @classmethod

@@ -30,17 +30,32 @@ class AssistantRouter:
         image_bytes: bytes | None = None,
         *,
         model: str | None = None,
+        context=None,
+        memory_context: str | None = None,
     ) -> RouteResult:
         try:
-            if model is None:
-                answer = self.local_ai.respond(text, history=history, image_bytes=image_bytes)
-            else:
+            kwargs = {
+                "history": history,
+                "image_bytes": image_bytes,
+                "context": context,
+                "memory_context": memory_context,
+            }
+            if model is not None:
+                kwargs["model"] = model
+            try:
+                answer = self.local_ai.respond(text, **kwargs)
+            except TypeError as exc:
+                if "unexpected keyword argument" not in str(exc):
+                    raise
+                kwargs.pop("context", None)
+                kwargs.pop("memory_context", None)
                 try:
-                    answer = self.local_ai.respond(text, history=history, image_bytes=image_bytes, model=model)
-                except TypeError as exc:
-                    if "unexpected keyword argument" not in str(exc):
+                    answer = self.local_ai.respond(text, **kwargs)
+                except TypeError as fallback_exc:
+                    if "unexpected keyword argument" not in str(fallback_exc):
                         raise
-                    answer = self.local_ai.respond(text, history=history, image_bytes=image_bytes)
+                    kwargs.pop("model", None)
+                    answer = self.local_ai.respond(text, **kwargs)
             return RouteResult(RouteStatus.ANSWER, answer)
         except LocalModelMissingError as exc:
             detail = str(exc)

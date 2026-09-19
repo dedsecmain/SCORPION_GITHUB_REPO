@@ -7,6 +7,8 @@ from dataclasses import asdict, dataclass, fields
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .context_engine import tokenize_for_relevance
+
 
 _ALLOWED_CATEGORIES = {"projects", "decisions", "preferences", "open_tasks", "important_facts"}
 _SECRET_MARKERS = {"password", "token", "api_key", "apikey", "cookie", "private_key", "private-key", "secret"}
@@ -132,6 +134,37 @@ class LongTermMemoryStore:
         if project_filter is not None:
             items = [item for item in items if item.project == project_filter]
         return sorted(items, key=lambda item: (item.updated_at, item.created_at, item.id))
+
+    def relevant(
+        self,
+        query: str,
+        *,
+        limit: int = 4,
+        project: str | None = None,
+    ) -> list[MemoryEntry]:
+        tokens = tokenize_for_relevance(query)
+        project_filter = str(project).strip().casefold() if project else None
+        scored: list[tuple[float, MemoryEntry]] = []
+        for item in self._entries.values():
+            title_tokens = tokenize_for_relevance(item.title)
+            content_tokens = tokenize_for_relevance(item.content)
+            overlap = len(tokens & content_tokens) + 2 * len(tokens & title_tokens)
+            project_match = bool(
+                project_filter
+                and item.project
+                and item.project.casefold() == project_filter
+            )
+            if overlap == 0 and not project_match:
+                continue
+            score = float(overlap * 4 + item.importance)
+            if project_match:
+                score += 8.0
+            if item.category in {"decisions", "open_tasks"}:
+                score += 1.0
+            scored.append((score, item))
+        scored.sort(key=lambda pair: (pair[0], pair[1].updated_at, pair[1].id), reverse=True)
+        bounded = max(1, min(8, int(limit)))
+        return [item for _score, item in scored[:bounded]]
 
     def update(self, entry_id: str, **changes) -> MemoryEntry:
         existing = self.get(entry_id)

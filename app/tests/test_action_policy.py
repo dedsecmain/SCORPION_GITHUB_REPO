@@ -65,3 +65,14 @@ def test_untrusted_app_is_blocked_until_explicitly_trusted(tmp_path):
     assert result.allowed is True
     assert result.requires_confirmation is False
     assert result.risk is ActionRisk.LOW
+
+
+
+@pytest.mark.parametrize(
+    "action",
+    ["show_status", "check_status", "inspect_screen", "show_screen", "list_files", "read_file", "check_updates"],
+)
+def test_harmless_read_aliases_do_not_trigger_critical_confirmation(action):
+    policy = ActionPolicy()
+    assert policy.classify(action) is ActionRisk.LOW
+    assert policy.requires_confirmation(action) is False

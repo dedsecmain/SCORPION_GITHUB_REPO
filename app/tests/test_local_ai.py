@@ -94,7 +94,7 @@ def test_respond_can_use_explicit_role_model():
 
 
 
-def test_system_prompt_uses_current_request_for_mk23_style():
+def test_system_prompt_uses_current_request_for_mk47_style():
     transport = FakeTransport()
     ai = OllamaLocalAI("http://127.0.0.1:11434", "gemma3:4b", transport=transport)
 
@@ -102,6 +102,25 @@ def test_system_prompt_uses_current_request_for_mk23_style():
 
     payload = transport.calls[-1][2]
     system_prompt = payload["messages"][0]["content"]
-    assert "Scorpion MK23" in system_prompt
+    assert "Scorpion MK47" in system_prompt
     assert "Aktueller Reaktionsmodus: SERIOUS" in system_prompt
     assert "keine Witze" in system_prompt
+
+
+
+def test_mk47_system_prompt_includes_relevant_memory_context():
+    from scorpion.context_engine import analyze_context
+
+    transport = FakeTransport()
+    ai = OllamaLocalAI("http://127.0.0.1:11434", "gemma3:4b", transport=transport)
+    context = analyze_context("Was ist beim Scorpion Update geplant?")
+    ai.respond(
+        "Was ist beim Scorpion Update geplant?",
+        context=context,
+        memory_context="MK50: Ollama Stabilität verbessern.",
+    )
+    payload = transport.calls[-1][2]
+    system_prompt = payload["messages"][0]["content"]
+    assert "Scorpion MK47" in system_prompt
+    assert "Hochdeutsch" in system_prompt
+    assert "MK50: Ollama Stabilität verbessern." in system_prompt
