@@ -4,9 +4,15 @@ Official update repository for **Scorpion MK74**, a Windows-first local-first AI
 
 ## Current release
 
-`v74.0.0`
+`v74.0.1`
 
-MK74 is the autonomy, personality and proactive-intelligence update after MK50. It keeps MK50 Build Mode, Ollama recovery, always-on wake and Windows autostart while adding a central permission model for what Scorpion may do locally versus what must wait for explicit approval.
+MK74.0.1 is the hotfix release for the MK74 autonomy, personality and proactive-intelligence update. It keeps MK50 Build Mode, Ollama recovery, always-on wake and Windows autostart while adding a central permission model for what Scorpion may do locally versus what must wait for explicit approval.
+
+## MK74.0.1 hotfix
+
+- Release self-check no longer treats preserved Wakeword or Windows-autostart preferences as release failures.
+- Fresh installs still default both features to enabled.
+- This fixes the rollback pattern that could also appear during MK50-era updates.
 
 ## MK74 highlights
 
