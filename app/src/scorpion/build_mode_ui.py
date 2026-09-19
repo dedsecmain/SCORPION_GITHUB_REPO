@@ -10,7 +10,15 @@ from .gesture_tracker import WebcamGestureTracker
 class BuildModeWindow:
     """Interactive local Build Mode workspace with gesture + mouse fallback."""
 
-    def __init__(self, parent, *, theme: dict[str, str], on_close=None):
+    def __init__(
+        self,
+        parent,
+        *,
+        theme: dict[str, str],
+        on_close=None,
+        gestures_enabled: bool = True,
+        camera_index: int = 0,
+    ):
         import customtkinter as ctk
         import tkinter as tk
 
@@ -22,7 +30,8 @@ class BuildModeWindow:
         self.session = BuildModeSession()
         self.session.activate()
         self._events: queue.SimpleQueue[BuildGestureEvent] = queue.SimpleQueue()
-        self._tracker = WebcamGestureTracker(self._events.put)
+        self._tracker = WebcamGestureTracker(self._events.put, camera_index=camera_index)
+        self._gestures_enabled = bool(gestures_enabled)
         self._mouse_dragging = False
         self._mouse_last_x: float | None = None
 
@@ -88,7 +97,11 @@ class BuildModeWindow:
 
         self.add_object("cube", x=0.36, y=0.48)
         self.add_object("sphere", x=0.64, y=0.48)
-        self._tracker.start()
+        if self._gestures_enabled:
+            self._tracker.start()
+        else:
+            self.status.configure(text="GESTURES OFF", text_color=theme["muted"])
+        self.window.after(80, self.render)
         self.window.after(16, self._tick)
 
     def add_object(self, kind: str, *, x: float = 0.5, y: float = 0.5):
