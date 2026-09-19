@@ -71,6 +71,9 @@ class Settings:
     app_trust_path: Path = Path.home() / ".scorpion" / "app_trust.json"
     screen_context_enabled: bool = True
     screen_context_interval_ms: int = 1000
+    autostart_enabled: bool = True
+    build_gestures_enabled: bool = True
+    build_camera_index: int = 0
     github_repo: str = OFFICIAL_GITHUB_REPO
 
     @classmethod
@@ -85,7 +88,7 @@ class Settings:
             memory_path=Path(os.getenv("SCORPION_MEMORY_PATH", str(Path.home() / ".scorpion" / "memory.json"))),
             mic_seconds=float(os.getenv("SCORPION_MIC_SECONDS", "6")),
             wake_listener_seconds=float(os.getenv("SCORPION_WAKE_LISTENER_SECONDS", "3")),
-            wake_listener_enabled=_env_bool("SCORPION_WAKE_LISTENER_ENABLED", False),
+            wake_listener_enabled=_env_bool("SCORPION_WAKE_LISTENER_ENABLED", True),
             realtime_model=os.getenv("SCORPION_REALTIME_MODEL", "gpt-realtime-2"),
             mode=Mode.from_value(os.getenv("SCORPION_MODE")),
             local_model=os.getenv("SCORPION_LOCAL_MODEL", "").strip(),
@@ -121,5 +124,8 @@ class Settings:
                 100,
                 int(os.getenv("SCORPION_SCREEN_CONTEXT_INTERVAL_MS", "1000")),
             ),
+            autostart_enabled=_env_bool("SCORPION_AUTOSTART_ENABLED", True),
+            build_gestures_enabled=_env_bool("SCORPION_BUILD_GESTURES_ENABLED", True),
+            build_camera_index=max(0, int(os.getenv("SCORPION_BUILD_CAMERA_INDEX", "0"))),
             github_repo=_official_update_repo(os.getenv("SCORPION_GITHUB_REPO")),
         )
