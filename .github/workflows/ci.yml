@@ -34,36 +34,36 @@ jobs:
       - name: Run tests
         shell: pwsh
         run: python -m pytest -q
-      - name: Run MK47 self-check
+      - name: Run MK50 self-check
         shell: pwsh
         run: |
           $env:PYTHONPATH = (Resolve-Path src)
           python -m scorpion.selfcheck
-      - name: Build deterministic MK47 release candidate
+      - name: Build deterministic MK50 release candidate
         shell: pwsh
         run: |
           $env:PYTHONPATH = (Resolve-Path src)
-          python -m scorpion.release_builder --app-root . --out ../dist/mk47 --version v47.0.0
-          Write-Output "MK47_MANIFEST_BEGIN"
-          Get-Content ../dist/mk47/manifest.json -Raw
-          Write-Output "MK47_MANIFEST_END"
-      - name: Upload MK47 release candidate
+          python -m scorpion.release_builder --app-root . --out ../dist/mk50 --version v50.0.0
+          Write-Output "MK50_MANIFEST_BEGIN"
+          Get-Content ../dist/mk50/manifest.json -Raw
+          Write-Output "MK50_MANIFEST_END"
+      - name: Upload MK50 release candidate
         uses: actions/upload-artifact@v4
         with:
-          name: scorpion-mk47-release-candidate
-          path: dist/mk47/*
+          name: scorpion-mk50-release-candidate
+          path: dist/mk50/*
           if-no-files-found: error
           retention-days: 3
-      - name: Verify committed MK47 manifest
+      - name: Verify committed MK50 manifest
         shell: pwsh
         run: |
-          if (-not (Test-Path ../release/v47.0.0/manifest.json)) {
-            throw "Committed MK47 manifest is missing."
+          if (-not (Test-Path ../release/v50.0.0/manifest.json)) {
+            throw "Committed MK50 manifest is missing."
           }
-          $built = Get-Content ../dist/mk47/manifest.json -Raw
-          $committed = Get-Content ../release/v47.0.0/manifest.json -Raw
+          $built = Get-Content ../dist/mk50/manifest.json -Raw
+          $committed = Get-Content ../release/v50.0.0/manifest.json -Raw
           if ($built -cne $committed) {
-            throw "Committed MK47 manifest does not match deterministic release build."
+            throw "Committed MK50 manifest does not match deterministic release build."
           }
       - name: Validate release manifests exclude user data
         shell: pwsh
