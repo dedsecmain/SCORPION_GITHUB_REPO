@@ -38,12 +38,12 @@ class UpdateInfo:
 
 class GitHubTransport:
     def get_json(self, url: str) -> dict:
-        req = request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "Scorpion-MK74"})
+        req = request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "Scorpion-MK74.0.1"})
         with request.urlopen(req, timeout=8) as response:
             return json.loads(response.read().decode("utf-8"))
 
     def get_bytes(self, url: str) -> bytes:
-        req = request.Request(url, headers={"User-Agent": "Scorpion-MK74"})
+        req = request.Request(url, headers={"User-Agent": "Scorpion-MK74.0.1"})
         with request.urlopen(req, timeout=30) as response:
             return response.read()
 

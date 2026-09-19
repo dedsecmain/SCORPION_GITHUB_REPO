@@ -1,6 +1,10 @@
-# 🦂 SCORPION MK74
+# 🦂 SCORPION MK74.0.1
 
-Scorpion MK74 builds on the signed MK50 stability core and adds a stricter autonomy model plus proactive intelligence.
+Scorpion MK74.0.1 fixes the update self-check rollback bug and builds on the signed MK50 stability core and adds a stricter autonomy model plus proactive intelligence.
+
+## Hotfix
+
+The release self-check now validates technical capability without requiring the user's persisted Wakeword or Windows-autostart switches to be enabled. User preferences may be disabled without causing rollback. Fresh-install defaults remain enabled.
 
 ## Autonomy Policy
 

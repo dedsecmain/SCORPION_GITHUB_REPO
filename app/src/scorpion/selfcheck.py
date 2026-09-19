@@ -14,9 +14,9 @@ def run_selfcheck() -> int:
     from .voice_state import VoiceSession
 
     settings = Settings.from_env()
-    if __version__ != "74.0.0":
+    if __version__ != "74.0.1":
         raise RuntimeError("MK74 version self-check failed")
-    if _version_tuple("v74.0.0") != (74, 0, 0):
+    if _version_tuple("v74.0.1") != (74, 0, 1):
         raise RuntimeError("Updater version parser self-check failed")
     if len(DEFAULT_PUBLIC_KEY_B64.strip()) < 40:
         raise RuntimeError("Release public key self-check failed")
@@ -45,8 +45,10 @@ def run_selfcheck() -> int:
         raise RuntimeError("MK74 context engine self-check failed")
     if VoiceSession().state.value != "STANDBY":
         raise RuntimeError("Voice state self-check failed")
-    if not settings.wake_listener_enabled or not settings.autostart_enabled:
-        raise RuntimeError("MK74 always-on defaults self-check failed")
+    # User preferences are intentionally not release-health requirements.
+    # A preserved .env may disable wake listening or autostart by choice.
+    # The self-check validates that settings load successfully, not that
+    # personal boolean preferences match fresh-install defaults.
     session = BuildModeSession()
     cube = session.add_object("cube", x=0.5, y=0.5)
     session.activate()

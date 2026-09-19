@@ -39,31 +39,31 @@ jobs:
         run: |
           $env:PYTHONPATH = (Resolve-Path src)
           python -m scorpion.selfcheck
-      - name: Build deterministic MK74 release candidate
+      - name: Build deterministic MK74.0.1 release candidate
         shell: pwsh
         run: |
           $env:PYTHONPATH = (Resolve-Path src)
-          python -m scorpion.release_builder --app-root . --out ../dist/mk74 --version v74.0.0
+          python -m scorpion.release_builder --app-root . --out ../dist/mk74 --version v74.0.1
           Write-Output "MK74_MANIFEST_BEGIN"
           Get-Content ../dist/mk74/manifest.json -Raw
           Write-Output "MK74_MANIFEST_END"
-      - name: Upload MK74 release candidate
+      - name: Upload MK74.0.1 release candidate
         uses: actions/upload-artifact@v4
         with:
-          name: scorpion-mk74-release-candidate
+          name: scorpion-mk74-0-1-release-candidate
           path: dist/mk74/*
           if-no-files-found: error
           retention-days: 3
-      - name: Verify committed MK74 manifest
+      - name: Verify committed MK74.0.1 manifest
         shell: pwsh
         run: |
-          if (-not (Test-Path ../release/v74.0.0/manifest.json)) {
-            throw "Committed MK74 manifest is missing."
+          if (-not (Test-Path ../release/v74.0.1/manifest.json)) {
+            throw "Committed MK74.0.1 manifest is missing."
           }
           $built = Get-Content ../dist/mk74/manifest.json -Raw
-          $committed = Get-Content ../release/v74.0.0/manifest.json -Raw
+          $committed = Get-Content ../release/v74.0.1/manifest.json -Raw
           if ($built -cne $committed) {
-            throw "Committed MK74 manifest does not match deterministic release build."
+            throw "Committed MK74.0.1 manifest does not match deterministic release build."
           }
       - name: Validate release manifests exclude user data
         shell: pwsh
