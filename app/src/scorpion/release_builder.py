@@ -86,15 +86,15 @@ def build_release(app_root: Path | str, output_dir: Path | str, *, version: str)
     app_root = Path(app_root).resolve()
     output_dir = Path(output_dir).resolve()
     version = str(version).strip()
-    if not version.startswith("v") or version != "v47.0.0":
-        raise ValueError("MK47 release version must be v47.0.0")
+    if not version.startswith("v") or version != "v50.0.0":
+        raise ValueError("MK50 release version must be v50.0.0")
 
     update_files = _update_files(app_root)
     full_files = _full_files(app_root, update_files)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     update_zip = output_dir / "SCORPION_update.zip"
-    full_zip = output_dir / "SCORPION_MK47.zip"
+    full_zip = output_dir / "SCORPION_MK50.zip"
     _write_deterministic_zip(update_zip, app_root, update_files)
     _write_deterministic_zip(full_zip, app_root, full_files)
 
@@ -120,10 +120,10 @@ def build_release(app_root: Path | str, output_dir: Path | str, *, version: str)
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build deterministic Scorpion MK47 release assets.")
+    parser = argparse.ArgumentParser(description="Build deterministic Scorpion MK50 release assets.")
     parser.add_argument("--app-root", default=".")
     parser.add_argument("--out", required=True)
-    parser.add_argument("--version", default="v47.0.0")
+    parser.add_argument("--version", default="v50.0.0")
     args = parser.parse_args(argv)
     result = build_release(args.app_root, args.out, version=args.version)
     print(result.manifest_path)
