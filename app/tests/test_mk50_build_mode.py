@@ -119,3 +119,22 @@ def test_autostart_can_be_disabled_cleanly(tmp_path):
     status = ensure_windows_autostart(app_root, enabled=False, startup_dir=startup, platform_name="nt")
     assert status.enabled is False
     assert not (startup / "Scorpion MK50.cmd").exists()
+
+
+
+def test_mediapipe_hands_backend_is_available():
+    import mediapipe as mp
+
+    assert hasattr(mp, "solutions")
+    assert hasattr(mp.solutions, "hands")
+
+
+def test_middle_finger_pinch_emits_rotation_after_motion():
+    gi = GestureInterpreter()
+    first = _hand(index=(0.5, 0.4), thumb=(0.50, 0.50), middle=(0.52, 0.50))
+    second = _hand(index=(0.5, 0.4), thumb=(0.60, 0.50), middle=(0.62, 0.50))
+    gi.update([first])
+    events = gi.update([second])
+    rotations = [event for event in events if event.gesture is BuildGesture.ROTATE]
+    assert rotations
+    assert rotations[0].value != 0
