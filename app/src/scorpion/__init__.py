@@ -1,3 +1,3 @@
-"""Scorpion MK23 adaptive local-first desktop assistant."""
+"""Scorpion MK47 adaptive local-first desktop assistant."""
 
-__version__ = "23.0.0"
+__version__ = "47.0.0"
