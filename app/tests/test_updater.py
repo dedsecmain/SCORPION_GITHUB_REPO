@@ -146,3 +146,11 @@ def test_mk74_is_newer_than_mk50_and_same_version_is_not_newer():
     assert is_newer_version("v74.0.0", "50.0.0") is True
     assert is_newer_version("v74.0.0", "74.0.0") is False
     assert is_newer_version("v74.0.1", "74.0.0") is True
+
+
+def test_mk74_0_1_hotfix_is_newer_than_failed_mk74_release():
+    from scorpion.updater import is_newer_version
+
+    assert is_newer_version("v74.0.1", "74.0.0") is True
+    assert is_newer_version("v74.0.1", "47.0.0") is True
+    assert is_newer_version("v74.0.1", "74.0.1") is False
