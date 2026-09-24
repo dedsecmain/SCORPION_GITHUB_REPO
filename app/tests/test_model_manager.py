@@ -37,3 +37,20 @@ def test_model_download_requires_confirmation():
     assert calls == []
     manager.pull("qwen3:8b", confirmed=True)
     assert calls == [["ollama", "pull", "qwen3:8b"]]
+
+
+def test_qwen35_4b_is_preferred_on_low_memory_when_installed():
+    manager = ModelManager()
+    pick = manager.recommend(
+        profile="low",
+        installed_models={"qwen3.5:4b", "gemma3:4b", "qwen3:8b"},
+    )
+    assert pick.text_model == "qwen3.5:4b"
+    assert pick.vision_model == "gemma3:4b"
+
+
+def test_qwen35_can_be_pulled_only_after_confirmation():
+    calls = []
+    manager = ModelManager(runner=lambda args: calls.append(args) or 0)
+    manager.pull("qwen3.5:4b", confirmed=True)
+    assert calls == [["ollama", "pull", "qwen3.5:4b"]]
