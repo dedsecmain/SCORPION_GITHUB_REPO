@@ -72,12 +72,24 @@ class BuildModeWindow:
             ).pack(side="left", padx=6, pady=10)
         ctk.CTkButton(
             toolbar,
+            text="GRÖSSE +",
+            width=90,
+            command=lambda: self._scale_selected(1.12),
+        ).pack(side="left", padx=6, pady=10)
+        ctk.CTkButton(
+            toolbar,
+            text="GRÖSSE −",
+            width=90,
+            command=lambda: self._scale_selected(0.89),
+        ).pack(side="left", padx=6, pady=10)
+        ctk.CTkButton(
+            toolbar,
             text="GESTURES ON/OFF",
             command=self.toggle_gestures,
         ).pack(side="left", padx=6, pady=10)
         ctk.CTkLabel(
             toolbar,
-            text="Pinch: greifen/ziehen · Zwei Pinches: skalieren · Daumen+Mittelfinger: drehen · Maus-Fallback aktiv",
+            text="Pinch: greifen/ziehen · Hände auseinander/zusammen: Größe · Hand drehen: Rotation · Maus-Fallback aktiv",
             text_color=theme["muted"],
         ).pack(side="right", padx=14)
 
@@ -135,6 +147,16 @@ class BuildModeWindow:
         self._mouse_dragging = False
         self.render()
 
+    def _scale_selected(self, factor: float) -> None:
+        if self.session.selected_id is None:
+            self.status.configure(
+                text="ERST OBJEKT AUSWÄHLEN",
+                text_color=self.theme["orange"],
+            )
+            return
+        self.session.apply(BuildGestureEvent(BuildGesture.SCALE, value=float(factor)))
+        self.render()
+
     def _mouse_wheel(self, event) -> None:
         if self.session.selected_id is None:
             x, y = self._norm(event)
@@ -142,8 +164,7 @@ class BuildModeWindow:
         if self.session.selected_id is None:
             return
         factor = 1.08 if event.delta > 0 else 0.92
-        self.session.apply(BuildGestureEvent(BuildGesture.SCALE, value=factor))
-        self.render()
+        self._scale_selected(factor)
 
     def _mouse_rotate_start(self, event) -> None:
         x, y = self._norm(event)
