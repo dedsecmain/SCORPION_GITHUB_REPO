@@ -832,6 +832,29 @@ def run_app() -> None:
         "MK50 Core online. Wakeword ist standardmäßig aktiv. Build Mode läuft lokal mit Handgesten und Maus-Fallback.",
     )
 
+    def agent_progress(role: str, state: str, model: str) -> None:
+        labels = {
+            "coder": "CODER",
+            "tester": "TESTER",
+            "production-validator": "VALIDATOR",
+        }
+        label = labels.get(role, role.upper())
+        if state == "start":
+            root.after(0, lambda: append_chat(
+                "SCORPION · RUFLO",
+                f"{label} arbeitet lokal mit {model} ..."
+            ))
+            root.after(0, lambda: voice_state_label.configure(
+                text=f"{label} · {model}"
+            ))
+        elif state == "done":
+            root.after(0, lambda: append_chat(
+                "SCORPION · RUFLO",
+                f"{label} fertig."
+            ))
+
+    controller.agent_team.progress_callback = agent_progress
+
     def run_bg(fn) -> None:
         threading.Thread(target=fn, daemon=True).start()
 
