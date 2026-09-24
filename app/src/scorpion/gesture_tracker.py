@@ -56,17 +56,34 @@ class GestureInterpreter:
         self,
         *,
         pinch_threshold: float = 0.065,
+        pinch_release_threshold: float = 0.085,
         middle_pinch_threshold: float = 0.055,
-        rotation_gain: float = 260.0,
+        middle_release_threshold: float = 0.075,
+        rotation_gain: float = 220.0,
         mirror_x: bool = True,
+        smoothing: float = 0.42,
+        dropout_grace_frames: int = 2,
+        move_epsilon: float = 0.005,
     ):
         self.pinch_threshold = float(pinch_threshold)
+        self.pinch_release_threshold = max(self.pinch_threshold, float(pinch_release_threshold))
         self.middle_pinch_threshold = float(middle_pinch_threshold)
+        self.middle_release_threshold = max(
+            self.middle_pinch_threshold,
+            float(middle_release_threshold),
+        )
         self.rotation_gain = float(rotation_gain)
         self.mirror_x = bool(mirror_x)
+        self.smoothing = max(0.0, min(1.0, float(smoothing)))
+        self.dropout_grace_frames = max(0, int(dropout_grace_frames))
+        self.move_epsilon = max(0.0, float(move_epsilon))
         self._single_pinched = False
+        self._rotation_active = False
         self._last_middle_x: float | None = None
         self._two_hand_baseline: float | None = None
+        self._smoothed_point: tuple[float, float] | None = None
+        self._last_emitted_point: tuple[float, float] | None = None
+        self._missing_frames = 0
 
     @staticmethod
     def _valid(hand) -> bool:
@@ -76,26 +93,54 @@ class GestureInterpreter:
         x, y = float(point[0]), float(point[1])
         return (1.0 - x if self.mirror_x else x), y
 
+    def _smooth_point(self, point: tuple[float, float]) -> tuple[float, float]:
+        if self._smoothed_point is None:
+            self._smoothed_point = point
+            return point
+        alpha = self.smoothing
+        old_x, old_y = self._smoothed_point
+        x = old_x + (point[0] - old_x) * alpha
+        y = old_y + (point[1] - old_y) * alpha
+        self._smoothed_point = (x, y)
+        return self._smoothed_point
+
     def _release_single_pinch(self, events: list[BuildGestureEvent]) -> None:
         if self._single_pinched:
             events.append(BuildGestureEvent(BuildGesture.PINCH_END))
-            self._single_pinched = False
+        self._single_pinched = False
+        self._rotation_active = False
+        self._last_middle_x = None
+        self._two_hand_baseline = None
+        self._smoothed_point = None
+        self._last_emitted_point = None
+        self._missing_frames = 0
+
+    def _index_pinched(self, hand) -> bool:
+        threshold = self.pinch_release_threshold if self._single_pinched else self.pinch_threshold
+        return _distance(hand[4], hand[8]) <= threshold
+
+    def _middle_pinched(self, hand) -> bool:
+        threshold = self.middle_release_threshold if self._rotation_active else self.middle_pinch_threshold
+        return _distance(hand[4], hand[12]) <= threshold
 
     def update(self, hands) -> list[BuildGestureEvent]:
         valid = [hand for hand in hands if self._valid(hand)][:2]
         events: list[BuildGestureEvent] = []
+
         if not valid:
             if self._single_pinched:
-                events.append(BuildGestureEvent(BuildGesture.PINCH_END))
-            self._single_pinched = False
-            self._last_middle_x = None
-            self._two_hand_baseline = None
+                self._missing_frames += 1
+                if self._missing_frames <= self.dropout_grace_frames:
+                    return events
+                self._release_single_pinch(events)
+            else:
+                self._last_middle_x = None
+                self._two_hand_baseline = None
+                self._smoothed_point = None
             return events
 
-        index_pinches = [
-            _distance(hand[4], hand[8]) <= self.pinch_threshold
-            for hand in valid
-        ]
+        self._missing_frames = 0
+        index_pinches = [self._index_pinched(hand) for hand in valid]
 
         if len(valid) >= 2 and all(index_pinches[:2]):
             p1, p2 = valid[0][8], valid[1][8]
@@ -105,13 +150,19 @@ class GestureInterpreter:
                 if not self._single_pinched:
                     p1x, p1y = self._workspace_point(p1)
                     p2x, p2y = self._workspace_point(p2)
-                    x = (p1x + p2x) / 2.0
-                    y = (p1y + p2y) / 2.0
-                    events.append(BuildGestureEvent(BuildGesture.PINCH_START, x=x, y=y))
+                    midpoint = self._smooth_point(((p1x + p2x) / 2.0, (p1y + p2y) / 2.0))
+                    events.append(
+                        BuildGestureEvent(
+                            BuildGesture.PINCH_START,
+                            x=midpoint[0],
+                            y=midpoint[1],
+                        )
+                    )
                     self._single_pinched = True
+                    self._last_emitted_point = midpoint
             else:
                 ratio = span / max(0.02, self._two_hand_baseline)
-                if abs(ratio - 1.0) >= 0.03:
+                if abs(ratio - 1.0) >= 0.025:
                     events.append(BuildGestureEvent(BuildGesture.SCALE, value=ratio))
                     self._two_hand_baseline = span
             return events
@@ -120,29 +171,41 @@ class GestureInterpreter:
         hand = valid[0]
         index_tip = hand[8]
         index_pinch = index_pinches[0]
-        middle_pinch = _distance(hand[4], hand[12]) <= self.middle_pinch_threshold
+        middle_pinch = self._middle_pinched(hand)
 
         if middle_pinch and not index_pinch:
-            self._release_single_pinch(events)
-            x, _ = self._workspace_point(hand[12])
-            if self._last_middle_x is not None:
-                delta = (x - self._last_middle_x) * self.rotation_gain
-                if abs(delta) >= 1.0:
-                    events.append(BuildGestureEvent(BuildGesture.ROTATE, value=delta))
-            self._last_middle_x = x
-            return events
-        self._last_middle_x = None
-
-        if index_pinch:
-            x, y = self._workspace_point(index_tip)
+            x, y = self._workspace_point(hand[12])
             if not self._single_pinched:
                 events.append(BuildGestureEvent(BuildGesture.PINCH_START, x=x, y=y))
                 self._single_pinched = True
+            if self._last_middle_x is not None:
+                delta = (x - self._last_middle_x) * self.rotation_gain
+                if abs(delta) >= 0.8:
+                    events.append(BuildGestureEvent(BuildGesture.ROTATE, value=delta))
+            self._last_middle_x = x
+            self._rotation_active = True
+            return events
+
+        if self._rotation_active:
+            self._rotation_active = False
+            self._last_middle_x = None
+            if not index_pinch:
+                self._release_single_pinch(events)
+                return events
+
+        if index_pinch:
+            point = self._smooth_point(self._workspace_point(index_tip))
+            if not self._single_pinched:
+                events.append(BuildGestureEvent(BuildGesture.PINCH_START, x=point[0], y=point[1]))
+                self._single_pinched = True
+                self._last_emitted_point = point
             else:
-                events.append(BuildGestureEvent(BuildGesture.PINCH_MOVE, x=x, y=y))
+                previous = self._last_emitted_point
+                if previous is None or _distance(previous, point) >= self.move_epsilon:
+                    events.append(BuildGestureEvent(BuildGesture.PINCH_MOVE, x=point[0], y=point[1]))
+                    self._last_emitted_point = point
         elif self._single_pinched:
-            events.append(BuildGestureEvent(BuildGesture.PINCH_END))
-            self._single_pinched = False
+            self._release_single_pinch(events)
         return events
 
 
