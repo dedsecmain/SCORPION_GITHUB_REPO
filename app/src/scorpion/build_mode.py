@@ -43,7 +43,7 @@ class BuildModeSession:
 
     ALLOWED_KINDS = {"cube", "sphere", "panel"}
 
-    def __init__(self, *, select_radius: float = 0.16):
+    def __init__(self, *, select_radius: float = 0.18):
         self.active = False
         self.select_radius = max(0.03, min(0.5, float(select_radius)))
         self._objects: dict[str, BuildObject] = {}
@@ -108,9 +108,20 @@ class BuildModeSession:
             distance = math.hypot(item.x - px, item.y - py)
             if best is None or distance < best[0]:
                 best = (distance, item.id)
-        if best is None or best[0] > self.select_radius:
+        if best is None:
+            return None
+        selected = self._objects[best[1]]
+        hit_radius = self.select_radius * max(1.0, min(2.25, selected.scale))
+        if best[0] > hit_radius:
             return None
         return best[1]
+
+    def select_at(self, x: float, y: float) -> BuildObject | None:
+        self.selected_id = self._select_nearest(x, y)
+        return self._objects.get(self.selected_id) if self.selected_id else None
+
+    def clear_selection(self) -> None:
+        self.selected_id = None
 
     def apply(self, event: BuildGestureEvent) -> BuildObject | None:
         if not self.active:
@@ -120,8 +131,7 @@ class BuildModeSession:
         if gesture is BuildGesture.PINCH_START:
             if event.x is None or event.y is None:
                 return None
-            self.selected_id = self._select_nearest(event.x, event.y)
-            return self._objects.get(self.selected_id) if self.selected_id else None
+            return self.select_at(event.x, event.y)
 
         if gesture is BuildGesture.PINCH_END:
             current = self._objects.get(self.selected_id) if self.selected_id else None
