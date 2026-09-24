@@ -42,5 +42,4 @@ def test_natural_voice_returns_false_when_online_synthesis_fails(tmp_path):
 
 def test_speech_text_preserves_line_breaks_as_pauses():
     spoken = NaturalVoiceService._speech_text("Erster Satz.\nZweiter Satz.\n\nDritter Satz.")
-    assert "Erster Satz., Zweiter Satz." in spoken
-    assert "Dritter Satz." in spoken
+    assert spoken == "Erster Satz. Zweiter Satz. Dritter Satz."
