@@ -20,10 +20,10 @@ class NaturalVoiceService:
 
     def __init__(
         self,
-        voice: str = "de-DE-KatjaNeural",
+        voice: str = "de-DE-SeraphinaMultilingualNeural",
         *,
-        rate: str = "-4%",
-        pitch: str = "+0Hz",
+        rate: str = "-2%",
+        pitch: str = "-1Hz",
         volume: str = "+0%",
         synthesizer: Synthesizer | None = None,
         player: Player | None = None,
@@ -42,11 +42,18 @@ class NaturalVoiceService:
 
     @staticmethod
     def _speech_text(text: str) -> str:
-        cleaned = re.sub(r"```.*?```", " Code-Block ausgelassen. ", text, flags=re.DOTALL)
+        cleaned = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
+        cleaned = re.sub(r"```.*?```", " Code-Block ausgelassen. ", cleaned, flags=re.DOTALL)
         cleaned = re.sub(r"`([^`]+)`", r"\1", cleaned)
         cleaned = re.sub(r"https?://\S+", " Link ", cleaned)
-        cleaned = re.sub(r"[*_#>]", "", cleaned)
+        cleaned = re.sub(r"(?m)^\s*[-*•]\s+", "", cleaned)
+        cleaned = re.sub(r"(?m)^\s*#{1,6}\s*", "", cleaned)
+        cleaned = re.sub(r"\n{2,}", ". ", cleaned)
+        cleaned = re.sub(r"\n", ", ", cleaned)
+        cleaned = re.sub(r"[*_>]", "", cleaned)
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        cleaned = re.sub(r"([.!?])\s*\.\s+", r"\1 ", cleaned)
+        cleaned = re.sub(r",\s*,+", ", ", cleaned)
         return cleaned[:6000]
 
     @staticmethod
