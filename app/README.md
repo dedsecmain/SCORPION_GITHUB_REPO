@@ -44,6 +44,27 @@ Ja, Herr Rodriguez.
 
 Direct OpenAI use remains one-request-only after approval. Scorpion may propose an update or improvement but cannot treat a proposal as permission to apply it. Critical and mutating desktop actions retain their existing confirmation requirements.
 
+## Ruflo coordination
+
+Scorpion can optionally use a locally installed Ruflo CLI as a coordination layer. Ruflo does not replace Ollama, Scorpion's personality, Voice Core, Wakeword, HUD, permission model, or signed updater.
+
+Supported commands include:
+
+```text
+Ruflo Status
+Ruflo plane ein Update für die Wakeword-Erkennung
+```
+
+The first integration creates a hierarchical Ruflo swarm and registers three specialized roles:
+
+- `scorpion-coder` using Ruflo's `coder` role
+- `scorpion-tester` using Ruflo's `tester` role
+- `scorpion-update` using Ruflo's `production-validator` role
+
+Ruflo coordination is treated as a local mutation and therefore requires explicit approval before Scorpion creates coordination state. Applying code or an update remains outside Ruflo and still requires Scorpion's normal explicit approval and signed update path.
+
+Scorpion does not automatically download Ruflo or run `npx ruflo@latest` on startup. A local `ruflo` command must be available, or `SCORPION_RUFLO_COMMAND` must be set deliberately.
+
 ## Developer verification
 
 From `app\`:
