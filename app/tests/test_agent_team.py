@@ -65,3 +65,25 @@ def test_local_agent_team_reuses_one_qwen_backend_sequentially():
     assert len(router.routes) == 1
     assert len(router.results) == 3
     assert all(success is True for _model, success, _latency in router.results)
+
+
+def test_local_agent_team_reports_progress_for_each_stage():
+    ai = FakeLocalAI()
+    router = FakeRouter()
+    progress = []
+    team = LocalAgentTeam(
+        ai,
+        router,
+        progress_callback=lambda role, state, model: progress.append((role, state, model)),
+    )
+
+    team.run("Verbessere die Wakeword-Erkennung")
+
+    assert progress == [
+        ("coder", "start", "qwen3.5:4b"),
+        ("coder", "done", "qwen3.5:4b"),
+        ("tester", "start", "qwen3.5:4b"),
+        ("tester", "done", "qwen3.5:4b"),
+        ("production-validator", "start", "qwen3.5:4b"),
+        ("production-validator", "done", "qwen3.5:4b"),
+    ]
