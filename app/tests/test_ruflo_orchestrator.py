@@ -33,7 +33,7 @@ def test_status_uses_local_command_without_installing_anything(tmp_path):
     assert runner.calls[0][1] == Path(tmp_path)
 
 
-def test_prepare_task_creates_coder_tester_and_update_validator(tmp_path):
+def test_prepare_task_creates_coder_tester_and_supported_update_reviewer(tmp_path):
     runner = FakeRunner()
     bridge = RufloOrchestrator(command="ruflo", cwd=tmp_path, runner=runner, max_agents=4)
 
@@ -47,7 +47,7 @@ def test_prepare_task_creates_coder_tester_and_update_validator(tmp_path):
         "agent",
         "spawn",
         "-t",
-        "production-validator",
+        "reviewer",
         "--name",
         "scorpion-update",
     ) in commands
