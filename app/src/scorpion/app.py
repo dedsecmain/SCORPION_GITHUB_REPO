@@ -151,17 +151,37 @@ class ScorpionController:
     def _auto_select_models(self) -> tuple[str, str]:
         saved_text = self.adaptive.get("text_model")
         saved_vision = self.adaptive.get("vision_model")
-        if saved_text and saved_vision:
-            return str(saved_text), str(saved_vision)
         try:
             profile = self.hardware_profiler.profile()
             self.hardware_profile = profile
         except Exception:
             profile = "low"
         try:
-            installed = self.local_ai.available_models()
+            installed = set(self.local_ai.available_models())
         except Exception:
             installed = set()
+
+        # Migrate the historical lightweight Gemma text default to the new
+        # Qwen-first setup once Qwen 3.5 is actually present. Other explicit
+        # user choices remain untouched.
+        if (
+            saved_text == "gemma3:4b"
+            and "qwen3.5:4b" in installed
+        ):
+            saved_text = "qwen3.5:4b"
+            try:
+                self.adaptive.set("text_model", saved_text)
+            except Exception:
+                pass
+
+        if (
+            saved_text
+            and saved_vision
+            and str(saved_text) in installed
+            and str(saved_vision) in installed
+        ):
+            return str(saved_text), str(saved_vision)
+
         recommendation = self.model_manager.recommend(profile, installed)
         return recommendation.text_model, recommendation.vision_model
 
