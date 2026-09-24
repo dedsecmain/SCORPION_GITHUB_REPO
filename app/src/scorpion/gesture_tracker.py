@@ -281,12 +281,20 @@ class WebcamGestureTracker:
             ]
             backend = getattr(cv2, "CAP_DSHOW", None) if os.name == "nt" else None
             for index in candidate_indices:
-                trial = cv2.VideoCapture(index, backend) if backend is not None else cv2.VideoCapture(index)
-                if trial.isOpened():
-                    cap = trial
-                    self._active_camera_index = index
+                backend_attempts = (backend, None) if backend is not None else (None,)
+                for selected_backend in backend_attempts:
+                    trial = (
+                        cv2.VideoCapture(index, selected_backend)
+                        if selected_backend is not None
+                        else cv2.VideoCapture(index)
+                    )
+                    if trial.isOpened():
+                        cap = trial
+                        self._active_camera_index = index
+                        break
+                    trial.release()
+                if cap is not None and cap.isOpened():
                     break
-                trial.release()
             if cap is None or not cap.isOpened():
                 raise GestureTrackingUnavailable(
                     "Keine nutzbare Webcam für Build Mode gefunden. Maus-Fallback bleibt aktiv."
