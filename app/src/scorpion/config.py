@@ -30,6 +30,23 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _natural_voice_setting(value: str | None) -> str:
+    normalized = (value or "").strip()
+    if not normalized or normalized == "de-DE-KatjaNeural":
+        return "de-DE-SeraphinaMultilingualNeural"
+    return normalized
+
+
+def _natural_rate_setting(value: str | None) -> str:
+    normalized = (value or "").strip()
+    return "-2%" if not normalized or normalized == "-4%" else normalized
+
+
+def _natural_pitch_setting(value: str | None) -> str:
+    normalized = (value or "").strip()
+    return "-1Hz" if not normalized or normalized == "+0Hz" else normalized
+
+
 def _official_update_repo(value: str | None) -> str:
     normalized = (value or OFFICIAL_GITHUB_REPO).strip().strip("/")
     if normalized.casefold() != OFFICIAL_GITHUB_REPO.casefold():
@@ -97,9 +114,9 @@ class Settings:
             local_model=os.getenv("SCORPION_LOCAL_MODEL", "").strip(),
             ollama_url=os.getenv("SCORPION_OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/"),
             whisper_model=os.getenv("SCORPION_WHISPER_MODEL", "base"),
-            natural_voice=os.getenv("SCORPION_NATURAL_VOICE", "de-DE-SeraphinaMultilingualNeural"),
-            natural_voice_rate=os.getenv("SCORPION_NATURAL_VOICE_RATE", "-2%"),
-            natural_voice_pitch=os.getenv("SCORPION_NATURAL_VOICE_PITCH", "-1Hz"),
+            natural_voice=_natural_voice_setting(os.getenv("SCORPION_NATURAL_VOICE")),
+            natural_voice_rate=_natural_rate_setting(os.getenv("SCORPION_NATURAL_VOICE_RATE")),
+            natural_voice_pitch=_natural_pitch_setting(os.getenv("SCORPION_NATURAL_VOICE_PITCH")),
             natural_voice_enabled=_env_bool("SCORPION_NATURAL_VOICE_ENABLED", True),
             wake_wait_seconds=float(os.getenv("SCORPION_WAKE_WAIT_SECONDS", "20")),
             command_end_silence_ms=int(os.getenv("SCORPION_COMMAND_END_SILENCE_MS", "800")),
