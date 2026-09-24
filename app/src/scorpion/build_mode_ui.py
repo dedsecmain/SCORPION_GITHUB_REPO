@@ -94,6 +94,8 @@ class BuildModeWindow:
         self.canvas.bind("<MouseWheel>", self._mouse_wheel)
         self.canvas.bind("<ButtonPress-3>", self._mouse_rotate_start)
         self.canvas.bind("<B3-Motion>", self._mouse_rotate)
+        self.canvas.bind("<ButtonRelease-3>", self._mouse_rotate_end)
+        self.window.bind("<Escape>", self._clear_selection)
 
         self.add_object("cube", x=0.36, y=0.48)
         self.add_object("sphere", x=0.64, y=0.48)
@@ -128,11 +130,15 @@ class BuildModeWindow:
         self.render()
 
     def _mouse_up(self, _event) -> None:
-        self.session.apply(BuildGestureEvent(BuildGesture.PINCH_END))
+        # Mouse selection stays active after releasing the button so wheel-scale
+        # and right-drag rotation remain usable without holding two buttons.
         self._mouse_dragging = False
         self.render()
 
     def _mouse_wheel(self, event) -> None:
+        if self.session.selected_id is None:
+            x, y = self._norm(event)
+            self.session.select_at(x, y)
         if self.session.selected_id is None:
             return
         factor = 1.08 if event.delta > 0 else 0.92
@@ -152,6 +158,15 @@ class BuildModeWindow:
         delta = float(event.x) - self._mouse_last_x
         self._mouse_last_x = float(event.x)
         self.session.apply(BuildGestureEvent(BuildGesture.ROTATE, value=delta * 0.6))
+        self.render()
+
+    def _mouse_rotate_end(self, _event) -> None:
+        self._mouse_last_x = None
+
+    def _clear_selection(self, _event=None) -> None:
+        self.session.clear_selection()
+        self._mouse_dragging = False
+        self._mouse_last_x = None
         self.render()
 
     def toggle_gestures(self) -> None:
@@ -184,7 +199,12 @@ class BuildModeWindow:
                 text_color=self.theme["orange"],
             )
         elif self._tracker.running:
-            self.status.configure(text="CAMERA GESTURES ACTIVE", text_color=self.theme["success"])
+            camera = self._tracker.active_camera_index
+            suffix = f" · CAM {camera}" if camera is not None else ""
+            self.status.configure(
+                text=f"CAMERA GESTURES ACTIVE{suffix}",
+                text_color=self.theme["success"],
+            )
         self.window.after(16, self._tick)
 
     @staticmethod
