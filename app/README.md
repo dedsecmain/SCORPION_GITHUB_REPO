@@ -44,6 +44,14 @@ Ja, Herr Rodriguez.
 
 Direct OpenAI use remains one-request-only after approval. Scorpion may propose an update or improvement but cannot treat a proposal as permission to apply it. Critical and mutating desktop actions retain their existing confirmation requirements.
 
+## Qwen-first local brain
+
+Scorpion now prefers a Qwen-family Ollama model for text, planning, coding and local agent work when it is installed. On lower-memory systems, `qwen3.5:4b` is the preferred starting point; Gemma remains the primary lightweight vision route when available. Ruflo roles reuse the same local Ollama backend sequentially instead of loading one large model per agent.
+
+## Voice and Build Mode reliability
+
+The natural voice default uses `de-DE-SeraphinaMultilingualNeural` with gentler rate/pitch settings and pause-aware text cleanup. Build Mode keeps object selection across rotation gestures, tolerates brief tracking dropouts, smooths hand motion, tries multiple camera indices/backends and keeps mouse selection active for wheel-scaling and right-drag rotation.
+
 ## Ruflo coordination
 
 Scorpion can optionally use a locally installed Ruflo CLI as a coordination layer. Ruflo does not replace Ollama, Scorpion's personality, Voice Core, Wakeword, HUD, permission model, or signed updater.
