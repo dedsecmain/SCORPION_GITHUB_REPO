@@ -229,6 +229,7 @@ class WebcamGestureTracker:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._error: str | None = None
+        self._active_camera_index: int | None = None
 
     @property
     def running(self) -> bool:
@@ -237,6 +238,10 @@ class WebcamGestureTracker:
     @property
     def error(self) -> str | None:
         return self._error
+
+    @property
+    def active_camera_index(self) -> int | None:
+        return self._active_camera_index
 
     def start(self) -> None:
         if self.running:
@@ -271,9 +276,29 @@ class WebcamGestureTracker:
                 raise GestureTrackingUnavailable("MediaPipe HandLandmarker API ist nicht verfügbar.")
 
             model_path = ensure_hand_model()
-            cap = cv2.VideoCapture(self.camera_index)
-            if not cap.isOpened():
-                raise GestureTrackingUnavailable("Webcam konnte für Build Mode nicht geöffnet werden.")
+            candidate_indices = [self.camera_index] + [
+                index for index in (0, 1, 2) if index != self.camera_index
+            ]
+            backend = getattr(cv2, "CAP_DSHOW", None) if os.name == "nt" else None
+            for index in candidate_indices:
+                trial = cv2.VideoCapture(index, backend) if backend is not None else cv2.VideoCapture(index)
+                if trial.isOpened():
+                    cap = trial
+                    self._active_camera_index = index
+                    break
+                trial.release()
+            if cap is None or not cap.isOpened():
+                raise GestureTrackingUnavailable(
+                    "Keine nutzbare Webcam für Build Mode gefunden. Maus-Fallback bleibt aktiv."
+                )
+            try:
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                cap.set(cv2.CAP_PROP_FPS, 30)
+                if hasattr(cv2, "CAP_PROP_BUFFERSIZE"):
+                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            except Exception:
+                pass
 
             options = vision.HandLandmarkerOptions(
                 base_options=mp_python.BaseOptions(model_asset_path=str(model_path)),
@@ -286,11 +311,18 @@ class WebcamGestureTracker:
             hands = vision.HandLandmarker.create_from_options(options)
             started = time.monotonic()
             last_timestamp = -1
+            failed_reads = 0
             while not self._stop.is_set():
                 ok, frame = cap.read()
                 if not ok:
-                    time.sleep(0.08)
+                    failed_reads += 1
+                    if failed_reads >= 20:
+                        raise GestureTrackingUnavailable(
+                            "Webcam liefert keine Bilder mehr. Maus-Fallback bleibt aktiv."
+                        )
+                    time.sleep(0.05)
                     continue
+                failed_reads = 0
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
                 timestamp_ms = max(
@@ -319,6 +351,7 @@ class WebcamGestureTracker:
                     cap.release()
             except Exception:
                 pass
+            self._active_camera_index = None
 
 
 
