@@ -50,9 +50,19 @@ class LocalAgentTeam:
         ),
     )
 
-    def __init__(self, local_ai, model_router: ModelRouter):
+    def __init__(self, local_ai, model_router: ModelRouter, *, progress_callback=None):
         self.local_ai = local_ai
         self.model_router = model_router
+        self.progress_callback = progress_callback
+
+    def _progress(self, role: str, state: str, model: str) -> None:
+        callback = self.progress_callback
+        if not callable(callback):
+            return
+        try:
+            callback(role, state, model)
+        except Exception:
+            pass
 
     def run(self, objective: str) -> AgentTeamResult:
         objective = " ".join(str(objective).strip().split())
@@ -75,6 +85,7 @@ class LocalAgentTeam:
             raise RuntimeError("Kein lokales Modell für Ruflo-Agenten verfügbar.")
 
         for role, instruction in self.ROLE_INSTRUCTIONS:
+            self._progress(role, "start", model)
             prompt = (
                 f"Du arbeitest als Scorpion-{role}.\n"
                 f"Ziel: {objective}\n"
