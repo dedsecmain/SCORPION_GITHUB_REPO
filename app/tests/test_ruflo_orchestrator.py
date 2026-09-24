@@ -51,7 +51,7 @@ def test_prepare_task_creates_coder_tester_and_update_validator(tmp_path):
         "--name",
         "scorpion-update",
     ) in commands
-    assert commands[-1][-3:] == (
+    assert commands[-1][-2:] == (
         "--description",
         "Verbessere die Wakeword-Erkennung",
     )
