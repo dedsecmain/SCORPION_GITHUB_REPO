@@ -600,11 +600,14 @@ def run_app() -> None:
         approved = {"value": False}
 
         def show_dialog() -> None:
-            approved["value"] = messagebox.askyesno(
-                "Scorpion · Aktion bestätigen",
-                reason + "\n\nNur mit Ja wird diese konkrete Freigabe erteilt.",
-            )
-            done.set()
+            try:
+                approved["value"] = messagebox.askyesno(
+                    "Scorpion · Aktion bestätigen",
+                    reason + "\n\nNur mit Ja wird diese konkrete Freigabe erteilt.",
+                    parent=root,
+                )
+            finally:
+                done.set()
 
         root.after(0, show_dialog)
         done.wait()
