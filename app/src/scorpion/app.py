@@ -955,7 +955,7 @@ def run_app() -> None:
             status_refs["build_mode"].configure(text="ACTIVE", text_color=THEME["success"])
             append_chat(
                 "SCORPION · BUILD MODE",
-                "Build Mode aktiv. Pinch greift und verschiebt, zwei Pinches skalieren, Daumen+Mittelfinger dreht. Maus-Fallback ist ebenfalls aktiv.",
+                "Build Mode aktiv. Pinch greift und verschiebt. Zwei Hände auseinander oder zusammen verändern die Größe. Eine echte Handdrehung rotiert das Objekt. Maus-Fallback ist ebenfalls aktiv.",
             )
         except Exception as exc:
             status_refs["build_mode"].configure(text="ERROR", text_color=THEME["danger"])
