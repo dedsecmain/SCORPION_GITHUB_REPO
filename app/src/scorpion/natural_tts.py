@@ -48,6 +48,7 @@ class NaturalVoiceService:
         cleaned = re.sub(r"https?://\S+", " Link ", cleaned)
         cleaned = re.sub(r"(?m)^\s*[-*•]\s+", "", cleaned)
         cleaned = re.sub(r"(?m)^\s*#{1,6}\s*", "", cleaned)
+        cleaned = re.sub(r"([.!?])\s*\n+", r"\1 ", cleaned)
         cleaned = re.sub(r"\n{2,}", ". ", cleaned)
         cleaned = re.sub(r"\n", ", ", cleaned)
         cleaned = re.sub(r"[*_>]", "", cleaned)
