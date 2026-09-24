@@ -63,17 +63,18 @@ class LocalAgentTeam:
         prior = ""
         stages: list[AgentStageResult] = []
 
-        for role, instruction in self.ROLE_INSTRUCTIONS:
-            priority = "quality" if role != "tester" else "balanced"
-            route = self.model_router.route(
-                TaskKind.REASONING,
-                complexity=0.9,
-                priority=priority,
-            )
-            model = route.model
-            if not model:
-                raise RuntimeError("Kein lokales Modell für Ruflo-Agenten verfügbar.")
+        # Choose one local model for the whole team so a low-memory laptop does
+        # not thrash RAM by swapping different large models between stages.
+        route = self.model_router.route(
+            TaskKind.REASONING,
+            complexity=0.9,
+            priority="balanced",
+        )
+        model = route.model
+        if not model:
+            raise RuntimeError("Kein lokales Modell für Ruflo-Agenten verfügbar.")
 
+        for role, instruction in self.ROLE_INSTRUCTIONS:
             prompt = (
                 f"Du arbeitest als Scorpion-{role}.\n"
                 f"Ziel: {objective}\n"
