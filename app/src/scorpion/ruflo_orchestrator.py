@@ -65,7 +65,7 @@ class RufloOrchestrator:
     AGENTS = (
         ("coder", "scorpion-coder"),
         ("tester", "scorpion-tester"),
-        ("production-validator", "scorpion-update"),
+        ("reviewer", "scorpion-update"),
     )
 
     def __init__(
