@@ -4,6 +4,7 @@ import threading
 import time
 import traceback
 from collections.abc import Callable
+from pathlib import Path
 
 from .actions import (
     execute_preflighted_action,
@@ -38,6 +39,7 @@ from .memory import ConversationMemory
 from .proactive_engine import ProactiveEngine
 from .long_term_memory import LongTermMemoryStore
 from .router import AssistantRouter, RouteStatus
+from .ruflo_orchestrator import RufloCommandError, RufloOrchestrator
 from .screen import ScreenService
 from .screen_context import ScreenContextMonitor
 from .updater import Updater, UpdateVerificationError
@@ -62,6 +64,7 @@ class ScorpionController:
         adaptive_store=None,
         hardware_profiler=None,
         model_manager=None,
+        ruflo=None,
     ):
         self.settings = settings
         self.mode = settings.mode
@@ -76,6 +79,12 @@ class ScorpionController:
         self.proactive_engine = ProactiveEngine()
         self.hardware_profiler = hardware_profiler or HardwareProfiler()
         self.model_manager = model_manager or ModelManager()
+        self.ruflo = ruflo or RufloOrchestrator(
+            enabled=settings.ruflo_enabled,
+            command=settings.ruflo_command,
+            cwd=Path(__file__).resolve().parents[2],
+            max_agents=settings.ruflo_max_agents,
+        )
 
         bootstrap_model = settings.local_model or "gemma3:4b"
         self.local_ai = local_ai or OllamaLocalAI(settings.ollama_url, bootstrap_model)
@@ -222,6 +231,7 @@ class ScorpionController:
             "route_reason": self.last_route_reason,
             "improvements": len(self.improvement_advisor.pending()),
             "autonomy": "LOCAL-FIRST",
+            "ruflo": "ENABLED" if self.ruflo.enabled else "OFF",
             "proactive": (
                 self.last_proactive_suggestion.title
                 if self.last_proactive_suggestion is not None
@@ -347,6 +357,35 @@ class ScorpionController:
 
     def handle(self, text: str, image_bytes: bytes | None = None) -> str:
         command = parse_command(text)
+        if command.kind is CommandKind.RUFLO_STATUS:
+            status = self.ruflo.status()
+            if status.available:
+                version = f" · {status.version}" if status.version else ""
+                return f"RUFLO READY{version} · lokal erreichbar."
+            return f"RUFLO OFFLINE · {status.detail}"
+
+        if command.kind is CommandKind.RUFLO_PLAN:
+            objective = command.target or text
+            approved = self.action_approval_callback(
+                "Ruflo darf lokale Koordinationsdaten für diese Entwicklungsaufgabe anlegen:\n\n"
+                f"{objective}"
+            )
+            decision = self.autonomy_policy.decide(
+                AutonomyKind.MUTATING,
+                approved=approved,
+            )
+            if not decision.allowed:
+                return "RUFLO BLOCKED · Die lokale Koordination wurde nicht freigegeben."
+            try:
+                plan = self.ruflo.prepare_task(objective)
+            except (RufloCommandError, ValueError) as exc:
+                return f"RUFLO BLOCKED · {exc}"
+            agents = ", ".join(plan.agents)
+            return (
+                f"RUFLO PLAN READY · {agents} · "
+                "Keine Code- oder Update-Änderung wurde automatisch angewendet."
+            )
+
         if command.kind is CommandKind.BUILD_MODE:
             return "BUILD MODE READY · Öffne den lokalen Workspace über die Desktop-Oberfläche."
         if command.kind is CommandKind.OPEN_APP and command.target:
