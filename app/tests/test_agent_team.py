@@ -62,5 +62,6 @@ def test_local_agent_team_reuses_one_qwen_backend_sequentially():
     assert result.final_output == "VALIDATED PLAN"
     assert len(ai.calls) == 3
     assert all(model == "qwen3.5:4b" for _prompt, model in ai.calls)
+    assert len(router.routes) == 1
     assert len(router.results) == 3
     assert all(success is True for _model, success, _latency in router.results)
