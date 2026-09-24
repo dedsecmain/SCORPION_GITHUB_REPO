@@ -74,6 +74,9 @@ class Settings:
     autostart_enabled: bool = True
     build_gestures_enabled: bool = True
     build_camera_index: int = 0
+    ruflo_enabled: bool = True
+    ruflo_command: str = "ruflo"
+    ruflo_max_agents: int = 4
     github_repo: str = OFFICIAL_GITHUB_REPO
 
     @classmethod
@@ -127,5 +130,8 @@ class Settings:
             autostart_enabled=_env_bool("SCORPION_AUTOSTART_ENABLED", True),
             build_gestures_enabled=_env_bool("SCORPION_BUILD_GESTURES_ENABLED", True),
             build_camera_index=max(0, int(os.getenv("SCORPION_BUILD_CAMERA_INDEX", "0"))),
+            ruflo_enabled=_env_bool("SCORPION_RUFLO_ENABLED", True),
+            ruflo_command=os.getenv("SCORPION_RUFLO_COMMAND", "ruflo").strip() or "ruflo",
+            ruflo_max_agents=max(4, min(16, int(os.getenv("SCORPION_RUFLO_MAX_AGENTS", "4")))),
             github_repo=_official_update_repo(os.getenv("SCORPION_GITHUB_REPO")),
         )
