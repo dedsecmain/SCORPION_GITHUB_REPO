@@ -6,6 +6,7 @@ import traceback
 from collections.abc import Callable
 from pathlib import Path
 
+from .agent_team import LocalAgentTeam
 from .actions import (
     execute_preflighted_action,
     execute_windows_action,
@@ -65,6 +66,7 @@ class ScorpionController:
         hardware_profiler=None,
         model_manager=None,
         ruflo=None,
+        agent_team=None,
     ):
         self.settings = settings
         self.mode = settings.mode
@@ -130,6 +132,7 @@ class ScorpionController:
             installed_models=installed_models,
             adaptive_store=self.adaptive,
         )
+        self.agent_team = agent_team or LocalAgentTeam(self.local_ai, self.model_router)
         self.camera = CameraService()
         self.screen = ScreenService()
         self.screen_context = ScreenContextMonitor(interval_ms=settings.screen_context_interval_ms)
@@ -380,9 +383,24 @@ class ScorpionController:
                 plan = self.ruflo.prepare_task(objective)
             except (RufloCommandError, ValueError) as exc:
                 return f"RUFLO BLOCKED · {exc}"
+
             agents = ", ".join(plan.agents)
+            try:
+                team = self.agent_team.run(objective)
+            except Exception as exc:
+                return (
+                    f"RUFLO PLAN READY · {agents} · "
+                    f"Lokales Agenten-Team konnte nicht ausgeführt werden: {exc}. "
+                    "Keine Code- oder Update-Änderung wurde automatisch angewendet."
+                )
+
+            models = ", ".join(
+                f"{stage.role}:{stage.model}" for stage in team.stages
+            )
             return (
-                f"RUFLO PLAN READY · {agents} · "
+                f"RUFLO + LOCAL TEAM READY · {agents}\n"
+                f"MODEL ROUTES · {models}\n\n"
+                f"{team.final_output}\n\n"
                 "Keine Code- oder Update-Änderung wurde automatisch angewendet."
             )
 
