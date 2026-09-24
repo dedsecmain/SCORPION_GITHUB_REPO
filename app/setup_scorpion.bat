@@ -62,7 +62,9 @@ echo Fuer lokale KI brauchst du Ollama separat.
 echo Scorpion waehlt bei leerem SCORPION_LOCAL_MODEL automatisch ein Hardware-Profil.
 echo Installierte Modelle werden bevorzugt. Modell-Downloads passieren nie ohne deine Bestaetigung.
 echo Gute Startmodelle sind:
+echo   ollama pull qwen3.5:4b
 echo   ollama pull gemma3:4b
+echo Optional fuer staerkere Hardware:
 echo   ollama pull qwen3:8b
 echo.
 echo Der Wake-Listener ist in MK50 standardmaessig aktiv und erholt sich nach temporaeren Audiofehlern.
