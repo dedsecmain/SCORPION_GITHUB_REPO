@@ -1,5 +1,6 @@
 import pytest
 
+from scorpion.app import ScorpionController
 from scorpion.model_manager import ModelManager, ModelRecommendation
 
 
@@ -54,3 +55,39 @@ def test_qwen35_can_be_pulled_only_after_confirmation():
     manager = ModelManager(runner=lambda args: calls.append(args) or 0)
     manager.pull("qwen3.5:4b", confirmed=True)
     assert calls == [["ollama", "pull", "qwen3.5:4b"]]
+
+
+def test_legacy_gemma_text_choice_migrates_to_qwen_when_available():
+    class Adaptive:
+        def __init__(self):
+            self.data = {
+                "text_model": "gemma3:4b",
+                "vision_model": "gemma3:4b",
+            }
+
+        def get(self, key, default=None):
+            return self.data.get(key, default)
+
+        def set(self, key, value):
+            self.data[key] = value
+
+    class LocalAI:
+        def available_models(self):
+            return {"qwen3.5:4b", "gemma3:4b"}
+
+    class Profiler:
+        def profile(self):
+            return "low"
+
+    controller = ScorpionController.__new__(ScorpionController)
+    controller.adaptive = Adaptive()
+    controller.local_ai = LocalAI()
+    controller.hardware_profiler = Profiler()
+    controller.hardware_profile = None
+    controller.model_manager = ModelManager()
+
+    text_model, vision_model = controller._auto_select_models()
+
+    assert text_model == "qwen3.5:4b"
+    assert vision_model == "gemma3:4b"
+    assert controller.adaptive.data["text_model"] == "qwen3.5:4b"
