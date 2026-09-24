@@ -11,6 +11,8 @@ class CommandKind(str, Enum):
     CAMERA = "camera"
     SCREEN = "screen"
     BUILD_MODE = "build_mode"
+    RUFLO_STATUS = "ruflo_status"
+    RUFLO_PLAN = "ruflo_plan"
 
 
 @dataclass(frozen=True)
@@ -36,6 +38,12 @@ def _target_from_text(text: str) -> str | None:
 
 def parse_command(text: str) -> ParsedCommand:
     t = " ".join(text.lower().strip().split())
+
+    if "ruflo" in t:
+        if t == "ruflo" or any(term in t for term in ("status", "bereit", "verbunden", "online")):
+            return ParsedCommand(CommandKind.RUFLO_STATUS, "ruflo")
+        if any(term in t for term in ("plan", "plane", "update", "verbesser", "entwickl", "prüf", "test")):
+            return ParsedCommand(CommandKind.RUFLO_PLAN, text.strip())
 
     build_terms = ("build mode", "build-mode", "buildmodus", "bau modus", "baumodus")
     if any(term in t for term in build_terms):
