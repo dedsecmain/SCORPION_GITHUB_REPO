@@ -50,7 +50,7 @@ Scorpion now prefers a Qwen-family Ollama model for text, planning, coding and l
 
 ## Voice and Build Mode reliability
 
-The natural voice default uses `de-DE-SeraphinaMultilingualNeural` with gentler rate/pitch settings and pause-aware text cleanup. Build Mode keeps object selection across rotation gestures, tolerates brief tracking dropouts, smooths hand motion, tries multiple camera indices/backends and keeps mouse selection active for wheel-scaling and right-drag rotation.
+The natural voice default uses `de-DE-SeraphinaMultilingualNeural` with gentler rate/pitch settings and pause-aware text cleanup. Build Mode keeps object selection stable, tolerates brief tracking dropouts, smooths hand motion, tries multiple camera indices/backends and keeps mouse selection active. Thumb+index pinch grabs/moves, two pinched hands moving apart or together enlarge/shrink, and a real palm/wrist twist rotates the selected object. Explicit Größe + / Größe − buttons remain available as a fallback.
 
 ## Ruflo coordination
 
