@@ -33,13 +33,25 @@ def test_two_hand_scale_does_not_accidentally_drop_selection():
     assert session.get(cube.id).scale == 1.20
 
 
-def test_gesture_interpreter_releases_pinch_before_rotation():
+def test_gesture_interpreter_keeps_selection_when_switching_to_rotation():
     interpreter = GestureInterpreter()
     start = interpreter.update([hand()])
     assert start and start[0].gesture is BuildGesture.PINCH_START
     rotate_hand = hand(index=(0.80, 0.50), thumb=(0.50, 0.50), middle=(0.52, 0.50))
     events = interpreter.update([rotate_hand])
-    assert any(event.gesture is BuildGesture.PINCH_END for event in events)
+    assert not any(event.gesture is BuildGesture.PINCH_END for event in events)
+    moved_rotation = hand(index=(0.80, 0.50), thumb=(0.58, 0.50), middle=(0.60, 0.50))
+    events = interpreter.update([moved_rotation])
+    assert any(event.gesture is BuildGesture.ROTATE for event in events)
+
+
+def test_short_tracking_dropout_does_not_release_object():
+    interpreter = GestureInterpreter(dropout_grace_frames=2)
+    assert interpreter.update([hand()])[0].gesture is BuildGesture.PINCH_START
+    assert interpreter.update([]) == []
+    assert interpreter.update([]) == []
+    released = interpreter.update([])
+    assert any(event.gesture is BuildGesture.PINCH_END for event in released)
 
 
 def test_gesture_interpreter_mirrors_camera_x_for_workspace_control():
