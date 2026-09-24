@@ -67,7 +67,7 @@ The first integration creates a hierarchical Ruflo swarm and registers three spe
 
 - `scorpion-coder` using Ruflo's `coder` role
 - `scorpion-tester` using Ruflo's `tester` role
-- `scorpion-update` using Ruflo's `production-validator` role
+- `scorpion-update` using Ruflo's supported `reviewer` role; Scorpion's local agent team still performs the final `production-validator` stage
 
 Ruflo coordination is treated as a local mutation and therefore requires explicit approval before Scorpion creates coordination state. Applying code or an update remains outside Ruflo and still requires Scorpion's normal explicit approval and signed update path.
 
