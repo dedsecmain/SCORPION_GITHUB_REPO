@@ -104,6 +104,8 @@ class LocalAgentTeam:
                     model=model,
                     context=context,
                     memory_context=None,
+                    think=False,
+                    options={"temperature": 0.2, "num_predict": 420},
                 )
                 success = bool(str(output).strip())
             finally:
