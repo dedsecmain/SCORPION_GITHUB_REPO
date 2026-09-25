@@ -50,6 +50,14 @@ def _update_files(app_root: Path) -> list[str]:
     for path in sorted(source.rglob("*")):
         if path.is_file() and "__pycache__" not in path.parts and path.suffix not in {".pyc", ".pyo"}:
             items.append(_safe_release_path(path.relative_to(app_root).as_posix()))
+
+    # HUD/media assets are runtime dependencies too. Keep them inside updates
+    # so visual upgrades do not disappear after installing a release package.
+    assets = app_root / "assets"
+    if assets.is_dir():
+        for path in sorted(assets.rglob("*")):
+            if path.is_file():
+                items.append(_safe_release_path(path.relative_to(app_root).as_posix()))
     for name in UPDATE_ROOT_FILES:
         path = app_root / name
         if not path.is_file():
