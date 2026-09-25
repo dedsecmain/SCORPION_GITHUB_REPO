@@ -188,3 +188,40 @@ def test_respond_supports_thinking_and_generation_options():
     assert payload["think"] is False
     assert payload["options"]["temperature"] == 0.2
     assert payload["options"]["num_predict"] == 420
+
+
+def test_chat_request_can_disable_retries_and_override_timeout():
+    class TimeoutThenSuccessTransport:
+        def __init__(self):
+            self.chat_calls = 0
+            self.calls = []
+
+        def __call__(self, method, url, payload=None, timeout=5.0):
+            self.calls.append((method, url, payload, timeout))
+            if url.endswith("/api/tags"):
+                return {"models": [{"name": "qwen3.5:4b"}]}
+            if url.endswith("/api/chat"):
+                self.chat_calls += 1
+                raise TimeoutError("slow local generation")
+            raise AssertionError(url)
+
+    transport = TimeoutThenSuccessTransport()
+    ai = OllamaLocalAI(
+        "http://127.0.0.1:11434",
+        "qwen3.5:4b",
+        transport=transport,
+        retry_attempts=2,
+        retry_delay=0,
+    )
+
+    with pytest.raises(OllamaOfflineError) as exc:
+        ai.respond(
+            "deep",
+            request_timeout=85.0,
+            retry_attempts=0,
+        )
+
+    assert transport.chat_calls == 1
+    chat_call = [call for call in transport.calls if call[1].endswith("/api/chat")][0]
+    assert chat_call[3] == 85.0
+    assert "nach 1 Versuchen" in str(exc.value)
