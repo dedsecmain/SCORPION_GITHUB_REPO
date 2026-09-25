@@ -172,3 +172,19 @@ def test_ollama_retry_is_bounded_and_reports_offline():
     status = ai.status()
     assert status.state == "offline"
     assert transport.calls == 3
+
+
+def test_respond_supports_thinking_and_generation_options():
+    transport = FakeTransport(tags={"models": [{"name": "qwen3.5:4b"}]})
+    ai = OllamaLocalAI("http://127.0.0.1:11434", "qwen3.5:4b", transport=transport)
+
+    ai.respond(
+        "schnell",
+        think=False,
+        options={"temperature": 0.2, "num_predict": 420},
+    )
+
+    payload = transport.calls[-1][2]
+    assert payload["think"] is False
+    assert payload["options"]["temperature"] == 0.2
+    assert payload["options"]["num_predict"] == 420
