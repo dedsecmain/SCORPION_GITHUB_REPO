@@ -64,7 +64,7 @@ class LocalAgentTeam:
         except Exception:
             pass
 
-    def run(self, objective: str) -> AgentTeamResult:
+    def run(self, objective: str, *, deep: bool = False) -> AgentTeamResult:
         objective = " ".join(str(objective).strip().split())
         if not objective:
             raise ValueError("Agenten-Team braucht ein konkretes Ziel.")
@@ -77,12 +77,48 @@ class LocalAgentTeam:
         # not thrash RAM by swapping different large models between stages.
         route = self.model_router.route(
             TaskKind.REASONING,
-            complexity=0.9,
+            complexity=0.9 if deep else 0.65,
             priority="balanced",
         )
         model = route.model
         if not model:
             raise RuntimeError("Kein lokales Modell für Ruflo-Agenten verfügbar.")
+
+        if not deep:
+            role = "fast-team"
+            self._progress(role, "start", model)
+            prompt = (
+                "Du bist Scorpions schnelles lokales Entwicklungs-Team in einer einzigen Runde.\n"
+                f"Ziel: {objective}\n"
+                "Erledige intern drei Rollen kompakt: 1) Coder: Lösung, "
+                "2) Tester: wichtigste Risiken/Tests, 3) Validator: sichere Empfehlung.\n"
+                "Antworte kurz und konkret auf Hochdeutsch. Maximal etwa 350 Wörter. "
+                "Keine Dateiänderung, kein Cloud-Aufruf und keine Update-Installation."
+            )
+            started = time.monotonic()
+            success = False
+            try:
+                output = self.local_ai.respond(
+                    prompt,
+                    history=(),
+                    model=model,
+                    context=context,
+                    memory_context=None,
+                )
+                success = bool(str(output).strip())
+            finally:
+                try:
+                    self.model_router.record_result(
+                        route,
+                        latency_ms=(time.monotonic() - started) * 1000.0,
+                        success=success,
+                    )
+                except Exception:
+                    pass
+            output = str(output).strip()
+            stages.append(AgentStageResult(role=role, model=model, output=output))
+            self._progress(role, "done", model)
+            return AgentTeamResult(objective=objective, stages=tuple(stages))
 
         for role, instruction in self.ROLE_INSTRUCTIONS:
             self._progress(role, "start", model)
