@@ -229,6 +229,14 @@ class Software3DRenderer:
         canvas.create_line(*origin[0, :2], *origin[1, :2], fill=axis_color, width=2)
         canvas.create_line(*origin[2, :2], *origin[3, :2], fill=axis_color, width=2)
 
+    def project_item_center(self, item, width: int, height: int) -> np.ndarray:
+        center = np.array([[
+            (float(item.x) - 0.5) * 5.4,
+            (0.58 - float(item.y)) * 3.4,
+            float(item.z) * 2.2,
+        ]], dtype=float)
+        return self.project(center, width, height)[0]
+
     def draw_mesh(self, canvas, asset: MeshAsset, item, width: int, height: int, *, selected: bool, accent: str):
         world = self.world_vertices(asset, item)
         projected = self.project(world, width, height)
