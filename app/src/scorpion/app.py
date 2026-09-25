@@ -1107,7 +1107,7 @@ def run_app() -> None:
             status_refs["build_mode"].configure(text="ACTIVE", text_color=THEME["success"])
             append_chat(
                 "SCORPION · BUILD MODE",
-                "Build Mode aktiv. Pinch greift und verschiebt. Zwei Hände auseinander oder zusammen verändern die Größe. Eine echte Handdrehung rotiert das Objekt. Maus-Fallback ist ebenfalls aktiv.",
+                "Build Mode 3D aktiv. Pinch greift und verschiebt 3D-Objekte. Zwei Hände verändern die Größe, eine Handdrehung rotiert. Über IMPORT 3D kannst du OBJ, GLB, GLTF, STL oder PLY laden.",
             )
         except Exception as exc:
             status_refs["build_mode"].configure(text="ERROR", text_color=THEME["danger"])
