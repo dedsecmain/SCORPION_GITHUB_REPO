@@ -809,6 +809,7 @@ def run_app() -> None:
             "lines": line_ids,
             "outlines": outline_ids,
             "nodes": node_ids,
+            "node_specs": node_specs,
             "body": body,
             "head": head,
             "body_mesh": body_mesh,
@@ -1005,14 +1006,28 @@ def run_app() -> None:
         for item in scorpion["outlines"]:
             canvas.itemconfigure(item, outline=bright, width=max(1, int(round(2 * scale))))
         node_radius = (2.3 if state == "SPEAKING" else 1.6) * scale
-        for item in scorpion["nodes"]:
-            x1, y1, x2, y2 = canvas.coords(item)
-            mx = (x1 + x2) / 2.0
-            my = (y1 + y2) / 2.0
+        for item, (dx, dy) in zip(scorpion["nodes"], scorpion["node_specs"]):
+            nx = cx + dx*scale
+            ny = cy + dy*scale
+
+            # Body/head nodes move with the torso; claw and tail nodes follow
+            # their attack direction so the holographic vertices stay attached.
+            if -20 <= dx <= 20 and -35 <= dy <= 20:
+                nx += bf
+                ny += bl
+            elif dx <= -30:
+                nx -= ct
+                ny += bl
+            elif dx >= 30 and dy > -35:
+                nx += ct
+                ny += bl
+            elif dy <= -35:
+                ny -= tr
+
             canvas.coords(
                 item,
-                mx-node_radius, my-node_radius,
-                mx+node_radius, my+node_radius,
+                nx-node_radius, ny-node_radius,
+                nx+node_radius, ny+node_radius,
             )
             canvas.itemconfigure(item, fill=bright)
 
@@ -1303,6 +1318,12 @@ def run_app() -> None:
         threading.Thread(target=fn, daemon=True).start()
 
     def set_voice_visual(state, remaining=None) -> None:
+        value = str(getattr(state, "value", state)).upper()
+        if voice_runtime.get("state") != value:
+            holo_runtime["last_state"] = voice_runtime.get("state", "STANDBY")
+            holo_runtime["state_started"] = time.monotonic()
+        voice_runtime["state"] = value
+
         model = SystemPanelModel.from_voice_state(state, remaining=remaining)
         status_refs["voice"].configure(text=model.voice_label)
         voice_state_label.configure(text=model.voice_label)
@@ -1324,7 +1345,6 @@ def run_app() -> None:
             "SPEAKING": "Antwort läuft …",
             "ERROR": "Voice Core Fehler",
         }
-        value = str(getattr(state, "value", state))
         voice_hint_label.configure(text=hint_map.get(value, ""))
         countdown_label.configure(
             text=f"{int(round(remaining))}s" if model.countdown_visible and remaining is not None else ""
@@ -1333,26 +1353,39 @@ def run_app() -> None:
     def animate_holo() -> None:
         if not root.winfo_exists():
             return
-        holo_runtime["phase"] = (holo_runtime["phase"] + 1) % 12
+
+        holo_runtime["phase"] = (holo_runtime["phase"] + 1) % 18
         phase = holo_runtime["phase"]
         accent = holo_runtime["accent"]
-        pulse_width = 5 if phase in (0, 1, 2, 3) else 3
-        core_canvas.itemconfigure(ring_outer, width=pulse_width)
-        core_canvas.itemconfigure(ring_inner, width=3 if phase % 6 < 3 else 2)
+        state = str(voice_runtime.get("state", "STANDBY")).upper()
+        state_time = max(0.0, time.monotonic() - holo_runtime["state_started"])
 
-        scan_y = 31 + (phase * 6)
-        if scan_y > 103:
-            scan_y = 31
+        # RED HOLO core pulse. Speaking gets a faster, stronger heartbeat.
+        if state == "SPEAKING":
+            pulse = 0.5 + 0.5 * math.sin(state_time * 9.0)
+            pulse_width = 4 + int(round(pulse * 2.0))
+        elif state == "THINKING":
+            pulse = 0.5 + 0.5 * math.sin(state_time * 5.0)
+            pulse_width = 3 + int(round(pulse * 2.0))
+        else:
+            pulse = 0.5 + 0.5 * math.sin(state_time * 2.4)
+            pulse_width = 3 + int(round(pulse))
+
+        core_canvas.itemconfigure(ring_outer, width=pulse_width)
+        core_canvas.itemconfigure(ring_inner, width=3 if pulse > 0.55 else 2)
+
+        scan_y = 30 + ((phase * 5) % 76)
         core_canvas.coords(holo_scan, 39, scan_y, 111, scan_y)
         core_canvas.itemconfigure(holo_scan, fill=accent)
 
-        brand_accent = THEME["accent_bright"] if phase % 8 < 4 else THEME["accent"]
-        for item in brand_holo["lines"]:
-            brand_canvas.itemconfigure(item, fill=brand_accent)
-        for item in brand_holo["outlines"]:
-            brand_canvas.itemconfigure(item, outline=brand_accent)
+        update_holo_scorpion(core_canvas, core_holo, state, state_time)
+        update_holo_scorpion(brand_canvas, brand_holo, state, state_time * 0.86)
 
-        root.after(110, animate_holo)
+        # Small controlled hologram instability in ERROR only.
+        if state == "ERROR" and phase % 3 == 0:
+            core_canvas.move(core_holo["head"], 1 if phase % 2 else -1, 0)
+
+        root.after(55, animate_holo)
 
     def countdown_tick() -> None:
         if voice_runtime["state"] != "WAITING_COMMAND" or voice_runtime["deadline"] is None:
