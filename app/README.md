@@ -46,7 +46,9 @@ Direct OpenAI use remains one-request-only after approval. Scorpion may propose 
 
 ## RED HOLO CORE HUD
 
-The desktop HUD uses a black/red tactical theme with neon-red borders, controls and status cards. The former letter-based core icon is replaced by a code-drawn holographic scorpion, including scanlines and a lightweight pulse animation. Voice states stay visually distinct inside the red palette, with orange-red reserved for thinking/warnings. Build Mode inherits the same RED HOLO palette, so no external image asset is required.
+The desktop HUD uses a black/red tactical theme with neon-red borders, controls and status cards. The core is a custom code-drawn low-poly/wireframe holographic scorpion with bright vertex nodes, scanlines and a lightweight pulse animation, so no external stock asset is required.
+
+The hologram reacts to voice state: STANDBY idles calmly, LISTENING raises its posture, THINKING builds orange-red energy, SPEAKING triggers an articulated attack loop with a body lunge, opening/thrusting claws, a raised tail/stinger and stronger glow, and ERROR produces controlled instability. The animation is intentionally capped at a lightweight refresh rate for laptop hardware.
 
 ## Qwen-first local brain
 
