@@ -752,7 +752,7 @@ def run_app() -> None:
         corner_radius=22,
         fg_color=THEME["panel"],
         border_width=1,
-        border_color=THEME["border"],
+        border_color=THEME["border_hot"],
     )
     core_panel.grid(row=0, column=0, sticky="ew", pady=(0, 12))
     core_panel.grid_columnconfigure(1, weight=1)
@@ -814,7 +814,7 @@ def run_app() -> None:
         corner_radius=22,
         fg_color=THEME["panel"],
         border_width=1,
-        border_color=THEME["border"],
+        border_color=THEME["border_hot"],
         text_color=THEME["text"],
         font=ctk.CTkFont(size=14),
         wrap="word",
@@ -827,7 +827,7 @@ def run_app() -> None:
         corner_radius=18,
         fg_color=THEME["panel_alt"],
         border_width=1,
-        border_color=THEME["border"],
+        border_color=THEME["border_hot"],
     )
     input_bar.grid(row=2, column=0, sticky="ew", pady=(12, 0))
     input_bar.grid_columnconfigure(0, weight=1)
