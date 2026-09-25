@@ -38,3 +38,8 @@ def test_natural_voice_returns_false_when_online_synthesis_fails(tmp_path):
 
     voice = NaturalVoiceService(synthesizer=broken, player=lambda _path: None, temp_dir=tmp_path)
     assert voice.speak("Hallo") is False
+
+
+def test_speech_text_preserves_line_breaks_as_pauses():
+    spoken = NaturalVoiceService._speech_text("Erster Satz.\nZweiter Satz.\n\nDritter Satz.")
+    assert spoken == "Erster Satz. Zweiter Satz. Dritter Satz."

@@ -62,15 +62,36 @@ class SystemPanelModel:
 
 
 THEME = {
-    "bg": "#090D12",
-    "panel": "#111821",
-    "panel_alt": "#151E29",
-    "border": "#223142",
-    "text": "#E8F2FF",
-    "muted": "#8293A8",
-    "cyan": "#34D6FF",
-    "cyan_dim": "#123748",
-    "orange": "#FF9F43",
-    "danger": "#FF5F6D",
-    "success": "#4ADE80",
+    "bg": "#030304",
+    "panel": "#0A0A0D",
+    "panel_alt": "#101014",
+    "rail": "#070709",
+    "border": "#5E0B12",
+    "border_hot": "#B5121B",
+    "text": "#FFF2F2",
+    "muted": "#B5797F",
+    # Legacy key names are kept so existing widgets inherit the red redesign
+    # without breaking functionality.
+    "cyan": "#FF1F2D",
+    "cyan_dim": "#3A090E",
+    "orange": "#FF6B2D",
+    "danger": "#FF0A1A",
+    "success": "#FF3B47",
+    "glow": "#FF3542",
+    "accent": "#FF101F",
+    "accent_bright": "#FF5A63",
+    "input": "#08080A",
+    "scanline": "#2A070B",
+    "core_fill": "#23070B",
+}
+
+
+RED_HOLO_STATE_PALETTE = {
+    VoiceVisualState.STANDBY: ("#6B0D15", "#190609", "#FF1F2D"),
+    VoiceVisualState.ACKNOWLEDGED: ("#FF3542", "#24070B", "#FF5963"),
+    VoiceVisualState.WAITING: ("#FF1F2D", "#25070B", "#FF3542"),
+    VoiceVisualState.LISTENING: ("#FF2B38", "#2E080D", "#FF4B56"),
+    VoiceVisualState.THINKING: ("#FF6B2D", "#32150A", "#FF7D3F"),
+    VoiceVisualState.SPEAKING: ("#FF3542", "#2D080D", "#FF5963"),
+    VoiceVisualState.ERROR: ("#FF0015", "#350006", "#FF0015"),
 }

@@ -11,6 +11,8 @@ def _fake_app(root: Path) -> Path:
     (app / "src/scorpion").mkdir(parents=True)
     (app / "src/scorpion/__init__.py").write_text('__version__ = "74.0.1"\n', encoding="utf-8")
     (app / "src/scorpion/core.py").write_text("VALUE = 74\n", encoding="utf-8")
+    (app / "assets").mkdir(parents=True)
+    (app / "assets/scorpion_holo_red.jpg").write_bytes(b"fake-jpeg-bytes")
     for name, content in {
         "requirements.txt": "pytest>=8\n",
         "pyproject.toml": "[project]\nname='scorpion'\n",
@@ -39,12 +41,14 @@ def test_release_builder_is_deterministic_and_excludes_user_data(tmp_path):
     assert "memory.json" not in names
     assert ".env.example" not in names
     assert "src/scorpion/core.py" in names
+    assert "assets/scorpion_holo_red.jpg" in names
 
     with zipfile.ZipFile(first.full_zip) as archive:
         full_names = set(archive.namelist())
     assert ".env" not in full_names
     assert "memory.json" not in full_names
     assert ".env.example" in full_names
+    assert "assets/scorpion_holo_red.jpg" in full_names
 
 
 def test_manifest_hashes_match_update_zip(tmp_path):

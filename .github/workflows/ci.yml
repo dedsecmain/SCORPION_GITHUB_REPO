@@ -55,6 +55,7 @@ jobs:
           if-no-files-found: error
           retention-days: 3
       - name: Verify committed MK74.0.1 manifest
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: pwsh
         run: |
           if (-not (Test-Path ../release/v74.0.1/manifest.json)) {

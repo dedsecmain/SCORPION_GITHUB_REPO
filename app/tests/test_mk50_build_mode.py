@@ -46,12 +46,21 @@ def test_build_mode_clamps_transform_values_and_ignores_events_when_off():
     assert obj.scale <= 5.0
 
 
-def _hand(index=(0.5, 0.5), thumb=(0.7, 0.5), middle=(0.65, 0.5), wrist=(0.5, 0.8)):
+def _hand(
+    index=(0.5, 0.5),
+    thumb=(0.7, 0.5),
+    middle=(0.65, 0.5),
+    wrist=(0.5, 0.8),
+    index_mcp=(0.40, 0.58),
+    pinky_mcp=(0.60, 0.58),
+):
     pts = [(0.5, 0.5)] * 21
     pts[0] = wrist
     pts[4] = thumb
+    pts[5] = index_mcp
     pts[8] = index
     pts[12] = middle
+    pts[17] = pinky_mcp
     return pts
 
 
@@ -70,7 +79,7 @@ def test_gesture_interpreter_emits_drag_sequence_for_index_pinch():
     assert end[0].gesture is BuildGesture.PINCH_END
 
 
-def test_gesture_interpreter_two_pinches_emit_scale_ratio():
+def test_gesture_interpreter_two_pinches_enlarge_and_shrink():
     gi = GestureInterpreter()
     left1 = _hand(index=(0.30, 0.50), thumb=(0.32, 0.50))
     right1 = _hand(index=(0.70, 0.50), thumb=(0.72, 0.50))
@@ -79,9 +88,16 @@ def test_gesture_interpreter_two_pinches_emit_scale_ratio():
     left2 = _hand(index=(0.20, 0.50), thumb=(0.22, 0.50))
     right2 = _hand(index=(0.80, 0.50), thumb=(0.82, 0.50))
     events = gi.update([left2, right2])
-    scale = [event for event in events if event.gesture is BuildGesture.SCALE]
-    assert scale
-    assert scale[0].value > 1.0
+    grow = [event for event in events if event.gesture is BuildGesture.SCALE]
+    assert grow
+    assert grow[0].value > 1.0
+
+    left3 = _hand(index=(0.35, 0.50), thumb=(0.37, 0.50))
+    right3 = _hand(index=(0.65, 0.50), thumb=(0.67, 0.50))
+    events = gi.update([left3, right3])
+    shrink = [event for event in events if event.gesture is BuildGesture.SCALE]
+    assert shrink
+    assert shrink[0].value < 1.0
 
 
 def test_autostart_writes_idempotent_startup_launcher(tmp_path):
@@ -159,12 +175,24 @@ def test_hand_landmarker_model_is_cached_atomically(tmp_path):
     assert target.stat().st_size == 1_000_001
 
 
-def test_middle_finger_pinch_emits_rotation_after_motion():
+def test_palm_twist_emits_rotation_without_middle_finger_gesture():
     gi = GestureInterpreter()
-    first = _hand(index=(0.5, 0.4), thumb=(0.50, 0.50), middle=(0.52, 0.50))
-    second = _hand(index=(0.5, 0.4), thumb=(0.60, 0.50), middle=(0.62, 0.50))
+    first = _hand(
+        index=(0.50, 0.50),
+        thumb=(0.52, 0.50),
+        middle=(0.80, 0.80),
+        index_mcp=(0.40, 0.58),
+        pinky_mcp=(0.60, 0.58),
+    )
+    twisted = _hand(
+        index=(0.50, 0.50),
+        thumb=(0.52, 0.50),
+        middle=(0.80, 0.80),
+        index_mcp=(0.46, 0.48),
+        pinky_mcp=(0.54, 0.68),
+    )
     gi.update([first])
-    events = gi.update([second])
+    events = gi.update([twisted])
     rotations = [event for event in events if event.gesture is BuildGesture.ROTATE]
     assert rotations
     assert rotations[0].value != 0

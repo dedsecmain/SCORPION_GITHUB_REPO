@@ -44,6 +44,45 @@ Ja, Herr Rodriguez.
 
 Direct OpenAI use remains one-request-only after approval. Scorpion may propose an update or improvement but cannot treat a proposal as permission to apply it. Critical and mutating desktop actions retain their existing confirmation requirements.
 
+## RED HOLO CORE HUD
+
+The desktop HUD uses a black/red tactical theme with neon-red borders, controls and status cards. The core is a custom code-drawn low-poly/wireframe holographic scorpion with bright vertex nodes, scanlines and a lightweight pulse animation, so no external stock asset is required.
+
+The hologram reacts to voice state: STANDBY idles calmly, LISTENING raises its posture, THINKING builds orange-red energy, SPEAKING triggers an articulated attack loop with a body lunge, opening/thrusting claws, a raised tail/stinger and stronger glow, and ERROR produces controlled instability. The animation is intentionally capped at a lightweight refresh rate for laptop hardware.
+
+## Qwen-first local brain
+
+Scorpion now prefers a Qwen-family Ollama model for text, planning, coding and local agent work when it is installed. On lower-memory systems, `qwen3.5:4b` is the preferred starting point; Gemma remains the primary lightweight vision route when available. Ruflo roles reuse the same local Ollama backend sequentially instead of loading one large model per agent.
+
+## Voice and Build Mode 3D
+
+The natural voice default uses `de-DE-SeraphinaMultilingualNeural` with gentler rate/pitch settings and pause-aware text cleanup.
+
+Build Mode is now a lightweight perspective 3D workspace inside the existing desktop UI. It renders shaded triangular meshes over a perspective floor grid, supports camera orbit/zoom, Z-depth movement and real 3D primitives. External local models can be imported with **IMPORT 3D** in OBJ, GLB, GLTF, STL or PLY format. Browser assets should be downloaded first and then imported as local files; Build Mode does not execute embedded scripts or automate arbitrary browser pages.
+
+Gesture controls remain local: thumb+index pinch grabs/moves, two pinched hands moving apart/together enlarge/shrink, and a real palm/wrist twist rotates the selected 3D object. Mouse fallback remains available, including right-drag object rotation, Alt+right-drag camera orbit and Alt+wheel camera zoom. Imported meshes are normalized and very high face counts are capped for interactive rendering on laptop hardware.
+
+## Ruflo coordination
+
+Scorpion can optionally use a locally installed Ruflo CLI as a coordination layer. Ruflo does not replace Ollama, Scorpion's personality, Voice Core, Wakeword, HUD, permission model, or signed updater.
+
+Supported commands include:
+
+```text
+Ruflo Status
+Ruflo plane ein Update für die Wakeword-Erkennung
+```
+
+The first integration creates a hierarchical Ruflo swarm and registers three specialized roles:
+
+- `scorpion-coder` using Ruflo's `coder` role
+- `scorpion-tester` using Ruflo's `tester` role
+- `scorpion-update` using Ruflo's supported `reviewer` role; Scorpion's local agent team still performs the final `production-validator` stage
+
+Ruflo coordination is treated as a local mutation and therefore requires explicit approval before Scorpion creates coordination state. Applying code or an update remains outside Ruflo and still requires Scorpion's normal explicit approval and signed update path.
+
+Scorpion does not automatically download Ruflo or run `npx ruflo@latest` on startup. A local `ruflo` command must be available, or `SCORPION_RUFLO_COMMAND` must be set deliberately.
+
 ## Developer verification
 
 From `app\`:
