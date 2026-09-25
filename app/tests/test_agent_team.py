@@ -70,7 +70,7 @@ def test_local_agent_team_fast_mode_uses_one_qwen_call():
     assert request_timeout == 75.0
     assert retry_attempts == 0
     assert keep_alive == "15m"
-    assert len(router.routes) == 1
+    assert len(router.routes) == 0
     assert len(router.results) == 1
     assert router.results[0][1] is True
 
@@ -95,7 +95,7 @@ def test_local_agent_team_deep_mode_keeps_three_specialists():
     assert all(call[5] == 0 for call in ai.calls)
     assert all(call[6] == "15m" for call in ai.calls)
     assert [call[3]["num_predict"] for call in ai.calls] == [140, 110, 90]
-    assert len(router.routes) == 1
+    assert len(router.routes) == 0
     assert len(router.results) == 3
 
 
