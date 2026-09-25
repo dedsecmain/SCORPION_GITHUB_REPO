@@ -33,8 +33,10 @@ class FakeLocalAI:
         model=None,
         context=None,
         memory_context=None,
+        think=None,
+        options=None,
     ):
-        self.calls.append((text, model))
+        self.calls.append((text, model, think, options))
         if "Scorpion-coder" in text:
             return "CODER PLAN"
         if "Scorpion-tester" in text:
@@ -56,6 +58,9 @@ def test_local_agent_team_fast_mode_uses_one_qwen_call():
     assert [stage.role for stage in result.stages] == ["fast-team"]
     assert result.stages[0].model == "qwen3.5:4b"
     assert len(ai.calls) == 1
+    _prompt, _model, think, options = ai.calls[0]
+    assert think is False
+    assert options["num_predict"] == 420
     assert len(router.routes) == 1
     assert len(router.results) == 1
     assert router.results[0][1] is True
