@@ -68,7 +68,8 @@ echo Optional fuer staerkere Hardware:
 echo   ollama pull qwen3:8b
 echo.
 echo Der Wake-Listener ist in MK50 standardmaessig aktiv und erholt sich nach temporaeren Audiofehlern.
-echo Build Mode nutzt lokale Webcam-Handgesten via MediaPipe und hat einen Maus-Fallback.
+echo Build Mode nutzt lokale Webcam-Handgesten via MediaPipe, einen 3D-Renderer und Maus-Fallback.
+echo Externe OBJ/GLB/GLTF/STL/PLY-Modelle koennen lokal importiert werden.
 echo Beim ersten Einsatz koennen Whisper-Modelle lokal heruntergeladen werden.
 echo Das verbraucht keine OpenAI-API-Credits.
 echo.
