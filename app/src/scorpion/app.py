@@ -937,7 +937,7 @@ def run_app() -> None:
 
     append_chat(
         "SCORPION",
-        "MK50 Core online. Wakeword ist standardmäßig aktiv. Build Mode läuft lokal mit Handgesten und Maus-Fallback.",
+        "RED HOLO CORE online. Wakeword ist standardmäßig aktiv. Build Mode läuft lokal mit Handgesten und Maus-Fallback.",
     )
 
     def agent_progress(role: str, state: str, model: str) -> None:
@@ -971,18 +971,14 @@ def run_app() -> None:
         model = SystemPanelModel.from_voice_state(state, remaining=remaining)
         status_refs["voice"].configure(text=model.voice_label)
         voice_state_label.configure(text=model.voice_label)
-        palette = {
-            VoiceVisualState.STANDBY: (THEME["cyan_dim"], "#0C2631", THEME["cyan"]),
-            VoiceVisualState.ACKNOWLEDGED: (THEME["success"], "#113023", THEME["success"]),
-            VoiceVisualState.WAITING: (THEME["cyan"], "#102B38", THEME["cyan"]),
-            VoiceVisualState.LISTENING: (THEME["cyan"], "#123A46", THEME["cyan"]),
-            VoiceVisualState.THINKING: (THEME["orange"], "#392817", THEME["orange"]),
-            VoiceVisualState.SPEAKING: (THEME["success"], "#14351F", THEME["success"]),
-            VoiceVisualState.ERROR: (THEME["danger"], "#35151A", THEME["danger"]),
-        }
-        outer, fill, accent = palette[model.core_state]
+        outer, fill, accent = RED_HOLO_STATE_PALETTE[model.core_state]
         core_canvas.itemconfigure(ring_outer, outline=outer)
         core_canvas.itemconfigure(ring_inner, outline=accent, fill=fill)
+        holo_runtime["accent"] = accent
+        for item in core_holo["lines"]:
+            core_canvas.itemconfigure(item, fill=accent)
+        for item in core_holo["outlines"]:
+            core_canvas.itemconfigure(item, outline=accent)
         voice_state_label.configure(text_color=accent)
         hint_map = {
             "STANDBY": 'Sag „Scorpion“',
@@ -998,6 +994,30 @@ def run_app() -> None:
         countdown_label.configure(
             text=f"{int(round(remaining))}s" if model.countdown_visible and remaining is not None else ""
         )
+
+    def animate_holo() -> None:
+        if not root.winfo_exists():
+            return
+        holo_runtime["phase"] = (holo_runtime["phase"] + 1) % 12
+        phase = holo_runtime["phase"]
+        accent = holo_runtime["accent"]
+        pulse_width = 5 if phase in (0, 1, 2, 3) else 3
+        core_canvas.itemconfigure(ring_outer, width=pulse_width)
+        core_canvas.itemconfigure(ring_inner, width=3 if phase % 6 < 3 else 2)
+
+        scan_y = 31 + (phase * 6)
+        if scan_y > 103:
+            scan_y = 31
+        core_canvas.coords(holo_scan, 39, scan_y, 111, scan_y)
+        core_canvas.itemconfigure(holo_scan, fill=accent)
+
+        brand_accent = THEME["accent_bright"] if phase % 8 < 4 else THEME["accent"]
+        for item in brand_holo["lines"]:
+            brand_canvas.itemconfigure(item, fill=brand_accent)
+        for item in brand_holo["outlines"]:
+            brand_canvas.itemconfigure(item, outline=brand_accent)
+
+        root.after(110, animate_holo)
 
     def countdown_tick() -> None:
         if voice_runtime["state"] != "WAITING_COMMAND" or voice_runtime["deadline"] is None:
@@ -1360,7 +1380,7 @@ def run_app() -> None:
             anchor="w",
             command=command,
             fg_color=THEME["cyan_dim"] if accent else "transparent",
-            hover_color="#172634",
+            hover_color="#2B080D",
             border_width=0 if accent else 1,
             border_color=THEME["border"],
             text_color=THEME["text"],
@@ -1388,7 +1408,7 @@ def run_app() -> None:
         corner_radius=12,
         command=on_send,
         fg_color=THEME["cyan_dim"],
-        hover_color="#15506A",
+        hover_color="#5A0B13",
     ).grid(row=0, column=1, padx=4, pady=11)
     ctk.CTkButton(
         input_bar,
@@ -1397,8 +1417,8 @@ def run_app() -> None:
         height=42,
         corner_radius=12,
         command=on_mic,
-        fg_color="#17212C",
-        hover_color="#26384A",
+        fg_color="#18070A",
+        hover_color="#3A090F",
     ).grid(row=0, column=2, padx=(4, 12), pady=11)
 
     def shutdown() -> None:
@@ -1418,6 +1438,7 @@ def run_app() -> None:
     entry.focus_set()
     refresh_status()
     set_voice_visual("STANDBY")
+    animate_holo()
     if settings.screen_context_enabled:
         controller.screen_context.start(on_screen_context)
     if settings.wake_listener_enabled:
