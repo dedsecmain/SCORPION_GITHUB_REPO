@@ -1399,14 +1399,13 @@ def run_app() -> None:
         value = str(getattr(state, "value", state))
 
         def update() -> None:
-            voice_runtime["state"] = value
+            set_voice_visual(value, remaining)
             if value == "WAITING_COMMAND":
                 duration = remaining if remaining is not None else settings.wake_wait_seconds
                 voice_runtime["deadline"] = time.monotonic() + duration
                 countdown_tick()
             else:
                 voice_runtime["deadline"] = None
-                set_voice_visual(value, remaining)
 
         root.after(0, update)
 
