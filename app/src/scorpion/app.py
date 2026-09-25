@@ -27,7 +27,7 @@ from .commands import CommandKind, parse_command
 from .config import Mode, Settings
 from .context_engine import analyze_context
 from .handoff import ChatGPTHandoff, HandoffResult
-from .hud import THEME, SystemPanelModel, VoiceVisualState
+from .hud import RED_HOLO_STATE_PALETTE, THEME, SystemPanelModel, VoiceVisualState
 from .improvement_advisor import ImprovementAdvisor
 from .hardware import HardwareProfiler
 from .listener import ContinuousWakeListener
@@ -560,7 +560,7 @@ def run_app() -> None:
     ctk.set_appearance_mode("dark")
 
     root = ctk.CTk(fg_color=THEME["bg"])
-    root.title("SCORPION MK74")
+    root.title("SCORPION MK74 · RED HOLO CORE")
     root.geometry("1400x840")
     root.minsize(1120, 700)
     root.grid_columnconfigure(0, weight=0, minsize=185)
@@ -627,23 +627,95 @@ def run_app() -> None:
     wake_listener: ContinuousWakeListener | None = None
     build_mode_ref: dict[str, object | None] = {"window": None}
     voice_runtime = {"state": "STANDBY", "deadline": None}
+    holo_runtime = {"accent": THEME["accent"], "phase": 0}
+
+    def draw_holo_scorpion(canvas, *, cx: float, cy: float, scale: float = 1.0):
+        line_ids = []
+        outline_ids = []
+
+        def line(*coords, width=2, smooth=False):
+            item = canvas.create_line(
+                *coords,
+                fill=THEME["accent"],
+                width=max(1, int(round(width * scale))),
+                smooth=smooth,
+                capstyle="round",
+            )
+            line_ids.append(item)
+            return item
+
+        def oval(x1, y1, x2, y2, width=2):
+            item = canvas.create_oval(
+                x1, y1, x2, y2,
+                outline=THEME["accent_bright"],
+                width=max(1, int(round(width * scale))),
+            )
+            outline_ids.append(item)
+            return item
+
+        # Body + head.
+        oval(cx - 11*scale, cy - 13*scale, cx + 11*scale, cy + 17*scale, 2)
+        oval(cx - 8*scale, cy - 24*scale, cx + 8*scale, cy - 10*scale, 2)
+
+        # Legs.
+        for dy in (-8, 0, 8):
+            line(cx - 9*scale, cy + dy*scale, cx - 24*scale, cy + (dy - 5)*scale, width=2)
+            line(cx - 24*scale, cy + (dy - 5)*scale, cx - 31*scale, cy + (dy + 3)*scale, width=2)
+            line(cx + 9*scale, cy + dy*scale, cx + 24*scale, cy + (dy - 5)*scale, width=2)
+            line(cx + 24*scale, cy + (dy - 5)*scale, cx + 31*scale, cy + (dy + 3)*scale, width=2)
+
+        # Claws.
+        line(cx - 5*scale, cy - 20*scale, cx - 22*scale, cy - 31*scale, width=2)
+        line(cx - 22*scale, cy - 31*scale, cx - 34*scale, cy - 27*scale, width=2)
+        line(cx - 22*scale, cy - 31*scale, cx - 29*scale, cy - 39*scale, width=2)
+        line(cx + 5*scale, cy - 20*scale, cx + 22*scale, cy - 31*scale, width=2)
+        line(cx + 22*scale, cy - 31*scale, cx + 34*scale, cy - 27*scale, width=2)
+        line(cx + 22*scale, cy - 31*scale, cx + 29*scale, cy - 39*scale, width=2)
+
+        # Curved tail ending in a stinger.
+        tail = line(
+            cx, cy + 16*scale,
+            cx + 7*scale, cy + 28*scale,
+            cx + 18*scale, cy + 34*scale,
+            cx + 28*scale, cy + 27*scale,
+            cx + 30*scale, cy + 13*scale,
+            cx + 24*scale, cy + 3*scale,
+            width=3,
+            smooth=True,
+        )
+        line(cx + 24*scale, cy + 3*scale, cx + 31*scale, cy - 3*scale, width=2)
+        line(cx + 24*scale, cy + 3*scale, cx + 20*scale, cy - 5*scale, width=2)
+
+        return {"lines": line_ids, "outlines": outline_ids, "tail": tail}
 
     # Left navigation
-    rail = ctk.CTkFrame(root, width=185, corner_radius=0, fg_color="#0C1118")
+    rail = ctk.CTkFrame(root, width=185, corner_radius=0, fg_color=THEME["rail"])
     rail.grid(row=0, column=0, sticky="nsew")
     rail.grid_propagate(False)
     ctk.CTkLabel(
         rail,
         text="SCORPION",
         font=ctk.CTkFont(size=22, weight="bold"),
-        text_color=THEME["text"],
-    ).pack(anchor="w", padx=16, pady=(24, 0))
+        text_color=THEME["accent_bright"],
+    ).pack(anchor="w", padx=16, pady=(20, 0))
     ctk.CTkLabel(
         rail,
-        text="MK50 · STABILITY CORE",
+        text="RED HOLO CORE · MK74",
         font=ctk.CTkFont(size=10, weight="bold"),
-        text_color=THEME["cyan"],
-    ).pack(anchor="w", padx=16, pady=(2, 20))
+        text_color=THEME["accent"],
+    ).pack(anchor="w", padx=16, pady=(2, 8))
+
+    brand_canvas = tk.Canvas(
+        rail,
+        width=155,
+        height=88,
+        bg=THEME["rail"],
+        highlightthickness=0,
+    )
+    brand_canvas.pack(padx=14, pady=(0, 14))
+    for y in range(16, 82, 8):
+        brand_canvas.create_line(18, y, 138, y, fill=THEME["scanline"], width=1)
+    brand_holo = draw_holo_scorpion(brand_canvas, cx=77, cy=45, scale=0.72)
 
     ctk.CTkLabel(
         rail,
@@ -651,7 +723,17 @@ def run_app() -> None:
         font=ctk.CTkFont(size=10, weight="bold"),
         text_color=THEME["muted"],
     ).pack(anchor="w", padx=16, pady=(0, 6))
-    mode_menu = ctk.CTkSegmentedButton(rail, values=["LOCAL", "HYBRID", "CLOUD"], height=34)
+    mode_menu = ctk.CTkSegmentedButton(
+        rail,
+        values=["LOCAL", "HYBRID", "CLOUD"],
+        height=34,
+        fg_color=THEME["panel_alt"],
+        selected_color=THEME["accent"],
+        selected_hover_color=THEME["accent_bright"],
+        unselected_color=THEME["panel_alt"],
+        unselected_hover_color=THEME["cyan_dim"],
+        border_color=THEME["border"],
+    )
     mode_menu.pack(fill="x", padx=12, pady=(0, 18))
     mode_menu.set(controller.mode.value)
 
@@ -677,22 +759,39 @@ def run_app() -> None:
 
     core_canvas = tk.Canvas(
         core_panel,
-        width=130,
+        width=150,
         height=130,
         bg=THEME["panel"],
         highlightthickness=0,
     )
     core_canvas.grid(row=0, column=0, rowspan=2, padx=18, pady=18)
-    ring_outer = core_canvas.create_oval(12, 12, 118, 118, outline=THEME["cyan_dim"], width=4)
-    ring_inner = core_canvas.create_oval(28, 28, 102, 102, fill="#0C2631", outline=THEME["cyan"], width=2)
-    core_canvas.create_text(65, 61, text="S", fill=THEME["text"], font=("Segoe UI", 30, "bold"))
-    core_canvas.create_text(65, 86, text="CORE", fill=THEME["cyan"], font=("Segoe UI", 8, "bold"))
+    ring_outer = core_canvas.create_oval(19, 9, 131, 121, outline=THEME["cyan_dim"], width=4)
+    ring_inner = core_canvas.create_oval(
+        31, 21, 119, 109,
+        fill=THEME["core_fill"],
+        outline=THEME["accent"],
+        width=2,
+    )
+    for y in range(30, 104, 8):
+        core_canvas.create_line(40, y, 110, y, fill=THEME["scanline"], width=1)
+    holo_scan = core_canvas.create_line(
+        39, 35, 111, 35,
+        fill=THEME["accent_bright"],
+        width=1,
+    )
+    core_holo = draw_holo_scorpion(core_canvas, cx=75, cy=67, scale=0.78)
+    core_canvas.create_text(
+        75, 112,
+        text="HOLO CORE",
+        fill=THEME["muted"],
+        font=("Segoe UI", 7, "bold"),
+    )
 
     voice_state_label = ctk.CTkLabel(
         core_panel,
         text="STANDBY",
         font=ctk.CTkFont(size=25, weight="bold"),
-        text_color=THEME["cyan"],
+        text_color=THEME["accent_bright"],
     )
     voice_state_label.grid(row=0, column=1, sticky="sw", padx=(2, 16), pady=(28, 2))
     voice_hint_label = ctk.CTkLabel(
@@ -706,7 +805,7 @@ def run_app() -> None:
         core_panel,
         text="",
         font=ctk.CTkFont(size=30, weight="bold"),
-        text_color=THEME["cyan"],
+        text_color=THEME["accent"],
     )
     countdown_label.grid(row=0, column=2, rowspan=2, padx=24)
 
@@ -738,18 +837,18 @@ def run_app() -> None:
         height=42,
         corner_radius=12,
         border_width=0,
-        fg_color="#0D141C",
+        fg_color=THEME["input"],
         text_color=THEME["text"],
     )
     entry.grid(row=0, column=0, sticky="ew", padx=(12, 8), pady=11)
 
     # Right system panel
-    right = ctk.CTkFrame(root, width=300, corner_radius=0, fg_color="#0C1118")
+    right = ctk.CTkFrame(root, width=300, corner_radius=0, fg_color=THEME["rail"])
     right.grid(row=0, column=2, sticky="nsew")
     right.grid_propagate(False)
     ctk.CTkLabel(
         right,
-        text="SYSTEM CORE",
+        text="SYSTEM CORE · REDLINE",
         font=ctk.CTkFont(size=15, weight="bold"),
         text_color=THEME["text"],
     ).pack(anchor="w", padx=18, pady=(22, 12))
@@ -821,7 +920,12 @@ def run_app() -> None:
         font=ctk.CTkFont(size=9, weight="bold"),
         text_color=THEME["muted"],
     ).pack(anchor="w", padx=12, pady=(9, 4))
-    mic_bar = ctk.CTkProgressBar(mic_card, height=8, progress_color=THEME["cyan"], fg_color="#162330")
+    mic_bar = ctk.CTkProgressBar(
+        mic_card,
+        height=8,
+        progress_color=THEME["accent_bright"],
+        fg_color=THEME["cyan_dim"],
+    )
     mic_bar.pack(fill="x", padx=12, pady=(0, 11))
     mic_bar.set(0)
 
