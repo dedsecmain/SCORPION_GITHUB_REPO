@@ -132,7 +132,7 @@ class LocalAgentTeam:
             if prior:
                 prompt += (
                     "\nVorherige Agenten-Ergebnisse:\n"
-                    + prior[-5000:]
+                    + prior[-2600:]
                     + "\n"
                 )
             prompt += (
@@ -142,6 +142,11 @@ class LocalAgentTeam:
 
             started = time.monotonic()
             success = False
+            deep_limits = {
+                "coder": {"num_predict": 320, "temperature": 0.2},
+                "tester": {"num_predict": 240, "temperature": 0.15},
+                "production-validator": {"num_predict": 220, "temperature": 0.15},
+            }
             try:
                 output = self.local_ai.respond(
                     prompt,
@@ -149,6 +154,10 @@ class LocalAgentTeam:
                     model=model,
                     context=context,
                     memory_context=None,
+                    think=False,
+                    options=deep_limits.get(role, {"num_predict": 240, "temperature": 0.2}),
+                    request_timeout=85.0,
+                    retry_attempts=0,
                 )
                 success = bool(str(output).strip())
             finally:
