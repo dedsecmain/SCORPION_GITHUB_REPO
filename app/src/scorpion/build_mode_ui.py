@@ -79,6 +79,8 @@ class BuildModeWindow:
         self._button(toolbar, "IMPORT 3D", self.import_3d, width=105, bright=True)
         self._button(toolbar, "GRÖSSE +", lambda: self._scale_selected(1.12), width=90)
         self._button(toolbar, "GRÖSSE −", lambda: self._scale_selected(0.89), width=90)
+        self._button(toolbar, "VOR", lambda: self._move_depth(0.12), width=58)
+        self._button(toolbar, "ZURÜCK", lambda: self._move_depth(-0.12), width=76)
         self._button(toolbar, "RESET CAM", self._reset_camera, width=92)
         self._button(toolbar, "GESTURES", self.toggle_gestures, width=92)
 
@@ -184,9 +186,23 @@ class BuildModeWindow:
         height = max(1, self.canvas.winfo_height())
         return event.x / width, event.y / height
 
+    def _select_projected(self, x: float, y: float) -> bool:
+        width = max(1, self.canvas.winfo_width())
+        height = max(1, self.canvas.winfo_height())
+        px, py = x * width, y * height
+        best = None
+        for item in self.session.objects():
+            center = self.renderer.project_item_center(item, width, height)
+            distance = ((float(center[0]) - px) ** 2 + (float(center[1]) - py) ** 2) ** 0.5
+            radius = 58.0 * max(0.7, min(2.2, item.scale))
+            if distance <= radius and (best is None or distance < best[0]):
+                best = (distance, item.id)
+        self.session.selected_id = best[1] if best else None
+        return self.session.selected_id is not None
+
     def _mouse_down(self, event) -> None:
         x, y = self._norm(event)
-        self.session.apply(BuildGestureEvent(BuildGesture.PINCH_START, x=x, y=y))
+        self._select_projected(x, y)
         self._mouse_dragging = self.session.selected_id is not None
         self.render()
 
@@ -199,6 +215,16 @@ class BuildModeWindow:
 
     def _mouse_up(self, _event) -> None:
         self._mouse_dragging = False
+        self.render()
+
+    def _move_depth(self, delta: float) -> None:
+        if self.session.selected_id is None:
+            self.status.configure(
+                text="ERST OBJEKT AUSWÄHLEN",
+                text_color=self.theme["orange"],
+            )
+            return
+        self.session.move_depth(delta)
         self.render()
 
     def _scale_selected(self, factor: float) -> None:
@@ -287,7 +313,10 @@ class BuildModeWindow:
                 event = self._events.get_nowait()
             except queue.Empty:
                 break
-            self.session.apply(event)
+            if event.gesture is BuildGesture.PINCH_START and event.x is not None and event.y is not None:
+                self._select_projected(event.x, event.y)
+            else:
+                self.session.apply(event)
             changed = True
         return changed
 
