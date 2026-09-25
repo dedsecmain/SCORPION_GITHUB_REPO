@@ -225,3 +225,46 @@ def test_chat_request_can_disable_retries_and_override_timeout():
     chat_call = [call for call in transport.calls if call[1].endswith("/api/chat")][0]
     assert chat_call[3] == 85.0
     assert "nach 1 Versuchen" in str(exc.value)
+
+
+def test_respond_agent_uses_minimal_generate_payload():
+    transport = FakeTransport(
+        tags={"models": [{"name": "qwen3.5:4b"}]},
+        chat_response={"response": "kompakte agentenantwort"},
+    )
+
+    class GenerateTransport(FakeTransport):
+        def __call__(self, method, url, payload=None, timeout=5.0):
+            self.calls.append((method, url, payload, timeout))
+            if url.endswith("/api/generate"):
+                return {"response": "kompakte agentenantwort"}
+            if url.endswith("/api/tags"):
+                return self.tags
+            raise AssertionError(url)
+
+    transport = GenerateTransport(tags={"models": [{"name": "qwen3.5:4b"}]})
+    ai = OllamaLocalAI("http://127.0.0.1:11434", "qwen3.5:4b", transport=transport)
+
+    answer = ai.respond_agent(
+        "Wakeword verbessern",
+        model="qwen3.5:4b",
+        system_prompt="Kompakter Agent.",
+        options={"num_ctx": 1536, "num_predict": 120},
+        request_timeout=75.0,
+        retry_attempts=0,
+        keep_alive="15m",
+    )
+
+    assert answer == "kompakte agentenantwort"
+    method, url, payload, timeout = transport.calls[-1]
+    assert method == "POST"
+    assert url.endswith("/api/generate")
+    assert timeout == 75.0
+    assert payload["model"] == "qwen3.5:4b"
+    assert payload["system"] == "Kompakter Agent."
+    assert payload["prompt"] == "Wakeword verbessern"
+    assert payload["think"] is False
+    assert payload["keep_alive"] == "15m"
+    assert payload["options"]["num_ctx"] == 1536
+    assert payload["options"]["num_predict"] == 120
+    assert "messages" not in payload
