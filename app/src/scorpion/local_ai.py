@@ -64,20 +64,29 @@ class OllamaLocalAI:
         self.retry_delay = max(0.0, float(retry_delay))
         self._sleep = sleep_fn or time.sleep
 
-    def _request(self, method: str, url: str, payload: dict | None, timeout: float) -> dict:
+    def _request(
+        self,
+        method: str,
+        url: str,
+        payload: dict | None,
+        timeout: float,
+        *,
+        retry_attempts: int | None = None,
+    ) -> dict:
         last_error: Exception | None = None
-        for attempt in range(self.retry_attempts + 1):
+        attempts = self.retry_attempts if retry_attempts is None else max(0, min(5, int(retry_attempts)))
+        for attempt in range(attempts + 1):
             try:
                 return self.transport(method, url, payload, timeout)
             except (OllamaOfflineError, OSError, error.URLError, TimeoutError) as exc:
                 last_error = exc
-                if attempt >= self.retry_attempts:
+                if attempt >= attempts:
                     break
                 delay = self.retry_delay * (2 ** attempt)
                 if delay > 0:
                     self._sleep(delay)
         raise OllamaOfflineError(
-            f"Ollama ist nach {self.retry_attempts + 1} Versuchen nicht erreichbar: {last_error}"
+            f"Ollama ist nach {attempts + 1} Versuchen nicht erreichbar: {last_error}"
         ) from last_error
 
     def available_models(self) -> set[str]:
@@ -127,6 +136,8 @@ class OllamaLocalAI:
         memory_context: str | None = None,
         think: bool | str | None = None,
         options: dict | None = None,
+        request_timeout: float | None = None,
+        retry_attempts: int | None = None,
     ) -> str:
         selected_model = model or self.model
         self._require_ready(selected_model)
@@ -156,7 +167,13 @@ class OllamaLocalAI:
         if options:
             payload["options"] = dict(options)
         try:
-            data = self._request("POST", f"{self.base_url}/api/chat", payload, self.timeout)
+            data = self._request(
+                "POST",
+                f"{self.base_url}/api/chat",
+                payload,
+                float(request_timeout if request_timeout is not None else self.timeout),
+                retry_attempts=retry_attempts,
+            )
         except OllamaOfflineError as exc:
             raise OllamaOfflineError(
                 f"Ollama-Verbindung ist während der Anfrage abgebrochen: {exc}"
