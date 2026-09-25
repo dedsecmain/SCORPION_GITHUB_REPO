@@ -732,7 +732,6 @@ def run_app() -> None:
         selected_hover_color=THEME["accent_bright"],
         unselected_color=THEME["panel_alt"],
         unselected_hover_color=THEME["cyan_dim"],
-        border_color=THEME["border"],
     )
     mode_menu.pack(fill="x", padx=12, pady=(0, 18))
     mode_menu.set(controller.mode.value)
