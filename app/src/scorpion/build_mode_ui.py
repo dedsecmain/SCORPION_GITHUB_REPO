@@ -48,7 +48,7 @@ class BuildModeWindow:
         top.grid(row=0, column=0, sticky="ew")
         ctk.CTkLabel(
             top,
-            text="BUILD MODE · LOCAL GESTURE WORKSPACE",
+            text="BUILD MODE · RED HOLO WORKSPACE",
             font=ctk.CTkFont(size=17, weight="bold"),
             text_color=theme["text"],
         ).pack(side="left", padx=16, pady=12)
@@ -69,23 +69,43 @@ class BuildModeWindow:
                 text=label,
                 width=105,
                 command=lambda k=kind: self.add_object(k),
+                fg_color=theme["cyan_dim"],
+                hover_color="#5A0B13",
+                border_width=1,
+                border_color=theme["border_hot"],
+                text_color=theme["text"],
             ).pack(side="left", padx=6, pady=10)
         ctk.CTkButton(
             toolbar,
             text="GRÖSSE +",
             width=90,
             command=lambda: self._scale_selected(1.12),
+            fg_color=theme["cyan_dim"],
+            hover_color="#5A0B13",
+            border_width=1,
+            border_color=theme["border_hot"],
+            text_color=theme["accent_bright"],
         ).pack(side="left", padx=6, pady=10)
         ctk.CTkButton(
             toolbar,
             text="GRÖSSE −",
             width=90,
             command=lambda: self._scale_selected(0.89),
+            fg_color=theme["cyan_dim"],
+            hover_color="#5A0B13",
+            border_width=1,
+            border_color=theme["border_hot"],
+            text_color=theme["accent_bright"],
         ).pack(side="left", padx=6, pady=10)
         ctk.CTkButton(
             toolbar,
             text="GESTURES ON/OFF",
             command=self.toggle_gestures,
+            fg_color=theme["panel"],
+            hover_color="#3A090F",
+            border_width=1,
+            border_color=theme["border_hot"],
+            text_color=theme["accent_bright"],
         ).pack(side="left", padx=6, pady=10)
         ctk.CTkLabel(
             toolbar,
