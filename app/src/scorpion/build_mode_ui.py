@@ -101,6 +101,7 @@ class BuildModeWindow:
         self.canvas.bind("<B1-Motion>", self._mouse_move)
         self.canvas.bind("<ButtonRelease-1>", self._mouse_up)
         self.canvas.bind("<MouseWheel>", self._mouse_wheel)
+        self.canvas.bind("<Alt-MouseWheel>", self._camera_wheel)
         self.canvas.bind("<ButtonPress-3>", self._mouse_rotate_start)
         self.canvas.bind("<B3-Motion>", self._mouse_rotate)
         self.canvas.bind("<ButtonRelease-3>", self._mouse_rotate_end)
@@ -237,12 +238,12 @@ class BuildModeWindow:
         self.session.apply(BuildGestureEvent(BuildGesture.SCALE, value=float(factor)))
         self.render()
 
+    def _camera_wheel(self, event):
+        self.renderer.zoom(0.92 if event.delta > 0 else 1.08)
+        self.render()
+        return "break"
+
     def _mouse_wheel(self, event) -> None:
-        # Alt+wheel zooms the 3D camera; normal wheel scales the selected object.
-        if event.state & 0x0008:
-            self.renderer.zoom(0.92 if event.delta > 0 else 1.08)
-            self.render()
-            return
         if self.session.selected_id is None:
             x, y = self._norm(event)
             self.session.select_at(x, y)
@@ -253,7 +254,7 @@ class BuildModeWindow:
     def _mouse_rotate_start(self, event) -> None:
         x, y = self._norm(event)
         if self.session.selected_id is None:
-            self.session.apply(BuildGestureEvent(BuildGesture.PINCH_START, x=x, y=y))
+            self._select_projected(x, y)
         self._mouse_last_x = float(event.x)
         self.render()
 
