@@ -405,8 +405,12 @@ class ScorpionController:
                 return f"RUFLO BLOCKED · {exc}"
 
             agents = ", ".join(plan.agents)
+            deep_mode = any(
+                marker in objective.casefold()
+                for marker in ("tief", "gründlich", "gruendlich", "deep mode", "tiefenanalyse")
+            )
             try:
-                team = self.agent_team.run(objective)
+                team = self.agent_team.run(objective, deep=deep_mode)
             except Exception as exc:
                 return (
                     f"RUFLO PLAN READY · {agents} · "
@@ -834,6 +838,7 @@ def run_app() -> None:
 
     def agent_progress(role: str, state: str, model: str) -> None:
         labels = {
+            "fast-team": "FAST TEAM",
             "coder": "CODER",
             "tester": "TESTER",
             "production-validator": "VALIDATOR",
