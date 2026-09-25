@@ -44,6 +44,10 @@ Ja, Herr Rodriguez.
 
 Direct OpenAI use remains one-request-only after approval. Scorpion may propose an update or improvement but cannot treat a proposal as permission to apply it. Critical and mutating desktop actions retain their existing confirmation requirements.
 
+## RED HOLO CORE HUD
+
+The desktop HUD uses a black/red tactical theme with neon-red borders, controls and status cards. The former letter-based core icon is replaced by a code-drawn holographic scorpion, including scanlines and a lightweight pulse animation. Voice states stay visually distinct inside the red palette, with orange-red reserved for thinking/warnings. Build Mode inherits the same RED HOLO palette, so no external image asset is required.
+
 ## Qwen-first local brain
 
 Scorpion now prefers a Qwen-family Ollama model for text, planning, coding and local agent work when it is installed. On lower-memory systems, `qwen3.5:4b` is the preferred starting point; Gemma remains the primary lightweight vision route when available. Ruflo roles reuse the same local Ollama backend sequentially instead of loading one large model per agent.
