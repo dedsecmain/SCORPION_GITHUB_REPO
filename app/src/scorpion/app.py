@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import threading
 import time
 import traceback
@@ -627,66 +628,393 @@ def run_app() -> None:
     wake_listener: ContinuousWakeListener | None = None
     build_mode_ref: dict[str, object | None] = {"window": None}
     voice_runtime = {"state": "STANDBY", "deadline": None}
-    holo_runtime = {"accent": THEME["accent"], "phase": 0}
+    holo_runtime = {
+        "accent": THEME["accent"],
+        "phase": 0,
+        "started": time.monotonic(),
+        "last_state": "STANDBY",
+        "state_started": time.monotonic(),
+    }
 
     def draw_holo_scorpion(canvas, *, cx: float, cy: float, scale: float = 1.0):
+        """Draw a custom red low-poly holographic scorpion.
+
+        Every major limb is retained as its own Canvas item so voice states can
+        animate the pose without redrawing the whole HUD every frame.
+        """
         line_ids = []
         outline_ids = []
+        node_ids = []
 
-        def line(*coords, width=2, smooth=False):
+        def line(*coords, width=1.6, smooth=False, glow=False):
+            if glow:
+                canvas.create_line(
+                    *coords,
+                    fill="#4A0710",
+                    width=max(2, int(round((width + 2.5) * scale))),
+                    smooth=smooth,
+                    capstyle="round",
+                    joinstyle="round",
+                )
             item = canvas.create_line(
                 *coords,
                 fill=THEME["accent"],
                 width=max(1, int(round(width * scale))),
                 smooth=smooth,
                 capstyle="round",
+                joinstyle="round",
             )
             line_ids.append(item)
             return item
 
-        def oval(x1, y1, x2, y2, width=2):
-            item = canvas.create_oval(
-                x1, y1, x2, y2,
+        def polygon(*coords, width=1.6):
+            item = canvas.create_polygon(
+                *coords,
+                fill="",
                 outline=THEME["accent_bright"],
                 width=max(1, int(round(width * scale))),
+                joinstyle="round",
             )
             outline_ids.append(item)
             return item
 
-        # Body + head.
-        oval(cx - 11*scale, cy - 13*scale, cx + 11*scale, cy + 17*scale, 2)
-        oval(cx - 8*scale, cy - 24*scale, cx + 8*scale, cy - 10*scale, 2)
+        def node(x, y, radius=1.7):
+            r = max(1.0, radius * scale)
+            item = canvas.create_oval(
+                x-r, y-r, x+r, y+r,
+                fill=THEME["accent_bright"],
+                outline="",
+            )
+            node_ids.append(item)
+            return item
 
-        # Legs.
-        for dy in (-8, 0, 8):
-            line(cx - 9*scale, cy + dy*scale, cx - 24*scale, cy + (dy - 5)*scale, width=2)
-            line(cx - 24*scale, cy + (dy - 5)*scale, cx - 31*scale, cy + (dy + 3)*scale, width=2)
-            line(cx + 9*scale, cy + dy*scale, cx + 24*scale, cy + (dy - 5)*scale, width=2)
-            line(cx + 24*scale, cy + (dy - 5)*scale, cx + 31*scale, cy + (dy + 3)*scale, width=2)
-
-        # Claws.
-        line(cx - 5*scale, cy - 20*scale, cx - 22*scale, cy - 31*scale, width=2)
-        line(cx - 22*scale, cy - 31*scale, cx - 34*scale, cy - 27*scale, width=2)
-        line(cx - 22*scale, cy - 31*scale, cx - 29*scale, cy - 39*scale, width=2)
-        line(cx + 5*scale, cy - 20*scale, cx + 22*scale, cy - 31*scale, width=2)
-        line(cx + 22*scale, cy - 31*scale, cx + 34*scale, cy - 27*scale, width=2)
-        line(cx + 22*scale, cy - 31*scale, cx + 29*scale, cy - 39*scale, width=2)
-
-        # Curved tail ending in a stinger.
-        tail = line(
-            cx, cy + 16*scale,
-            cx + 7*scale, cy + 28*scale,
-            cx + 18*scale, cy + 34*scale,
-            cx + 28*scale, cy + 27*scale,
-            cx + 30*scale, cy + 13*scale,
-            cx + 24*scale, cy + 3*scale,
-            width=3,
-            smooth=True,
+        # Angular body shell + internal triangulation gives a low-poly wireframe.
+        body = polygon(
+            cx-16*scale, cy-7*scale,
+            cx-10*scale, cy-18*scale,
+            cx+7*scale, cy-20*scale,
+            cx+17*scale, cy-7*scale,
+            cx+13*scale, cy+10*scale,
+            cx,          cy+18*scale,
+            cx-13*scale, cy+10*scale,
         )
-        line(cx + 24*scale, cy + 3*scale, cx + 31*scale, cy - 3*scale, width=2)
-        line(cx + 24*scale, cy + 3*scale, cx + 20*scale, cy - 5*scale, width=2)
+        head = polygon(
+            cx-9*scale, cy-25*scale,
+            cx,         cy-30*scale,
+            cx+9*scale, cy-25*scale,
+            cx+7*scale, cy-16*scale,
+            cx-7*scale, cy-16*scale,
+        )
+        body_mesh = [
+            line(cx-10*scale, cy-18*scale, cx+13*scale, cy+10*scale),
+            line(cx+7*scale, cy-20*scale, cx-13*scale, cy+10*scale),
+            line(cx-16*scale, cy-7*scale, cx+17*scale, cy-7*scale),
+            line(cx, cy-29*scale, cx, cy+18*scale),
+        ]
 
-        return {"lines": line_ids, "outlines": outline_ids, "tail": tail}
+        # Three articulated legs per side.
+        legs = []
+        for dy, spread in ((-8, 3), (0, 7), (8, 11)):
+            left = line(
+                cx-12*scale, cy+dy*scale,
+                cx-(27+spread)*scale, cy+(dy-3)*scale,
+                cx-(37+spread)*scale, cy+(dy+8)*scale,
+                width=1.5,
+            )
+            right = line(
+                cx+12*scale, cy+dy*scale,
+                cx+(27+spread)*scale, cy+(dy-3)*scale,
+                cx+(37+spread)*scale, cy+(dy+8)*scale,
+                width=1.5,
+            )
+            legs.extend([left, right])
+
+        # Claws are split into arm, upper jaw and lower jaw so SPEAKING can
+        # open and thrust them independently.
+        claw_left_arm = line(
+            cx-7*scale, cy-19*scale,
+            cx-25*scale, cy-29*scale,
+            cx-38*scale, cy-24*scale,
+            width=2.0,
+            glow=True,
+        )
+        claw_left_top = line(
+            cx-38*scale, cy-24*scale,
+            cx-50*scale, cy-33*scale,
+            cx-55*scale, cy-28*scale,
+            width=1.8,
+        )
+        claw_left_bottom = line(
+            cx-38*scale, cy-24*scale,
+            cx-52*scale, cy-17*scale,
+            cx-55*scale, cy-22*scale,
+            width=1.8,
+        )
+        claw_right_arm = line(
+            cx+7*scale, cy-19*scale,
+            cx+25*scale, cy-29*scale,
+            cx+38*scale, cy-24*scale,
+            width=2.0,
+            glow=True,
+        )
+        claw_right_top = line(
+            cx+38*scale, cy-24*scale,
+            cx+50*scale, cy-33*scale,
+            cx+55*scale, cy-28*scale,
+            width=1.8,
+        )
+        claw_right_bottom = line(
+            cx+38*scale, cy-24*scale,
+            cx+52*scale, cy-17*scale,
+            cx+55*scale, cy-22*scale,
+            width=1.8,
+        )
+
+        # Segmented rising tail with a bright stinger.
+        tail = line(
+            cx+4*scale,  cy+15*scale,
+            cx+18*scale, cy+29*scale,
+            cx+31*scale, cy+25*scale,
+            cx+37*scale, cy+10*scale,
+            cx+35*scale, cy-9*scale,
+            cx+28*scale, cy-26*scale,
+            cx+16*scale, cy-40*scale,
+            cx+5*scale,  cy-47*scale,
+            width=2.7,
+            smooth=True,
+            glow=True,
+        )
+        stinger_left = line(
+            cx+5*scale, cy-47*scale,
+            cx-2*scale, cy-58*scale,
+            width=2.0,
+        )
+        stinger_right = line(
+            cx+5*scale, cy-47*scale,
+            cx+13*scale, cy-55*scale,
+            width=2.0,
+        )
+
+        # Bright vertices mimic the energy nodes from a polygonal hologram.
+        node_specs = [
+            (-55, -28), (-55, -22), (55, -28), (55, -22),
+            (-38, -24), (38, -24), (-16, -7), (17, -7),
+            (0, -29), (0, 0), (0, 18), (18, 29), (37, 10),
+            (28, -26), (16, -40), (5, -47), (-2, -58),
+        ]
+        for dx, dy in node_specs:
+            node(cx+dx*scale, cy+dy*scale, 1.8 if dy < -40 else 1.4)
+
+        return {
+            "lines": line_ids,
+            "outlines": outline_ids,
+            "nodes": node_ids,
+            "body": body,
+            "head": head,
+            "body_mesh": body_mesh,
+            "legs": legs,
+            "claw_left_arm": claw_left_arm,
+            "claw_left_top": claw_left_top,
+            "claw_left_bottom": claw_left_bottom,
+            "claw_right_arm": claw_right_arm,
+            "claw_right_top": claw_right_top,
+            "claw_right_bottom": claw_right_bottom,
+            "tail": tail,
+            "stinger_left": stinger_left,
+            "stinger_right": stinger_right,
+            "cx": cx,
+            "cy": cy,
+            "scale": scale,
+        }
+
+    def update_holo_scorpion(canvas, scorpion, state: str, t: float) -> None:
+        """Animate the hologram pose for the current voice state."""
+        cx = scorpion["cx"]
+        cy = scorpion["cy"]
+        scale = scorpion["scale"]
+        state = str(state or "STANDBY").upper()
+
+        idle = math.sin(t * 2.0)
+        body_forward = 0.0
+        body_lift = idle * 0.6
+        claw_open = 0.0
+        claw_thrust = 0.0
+        tail_raise = 0.0
+        shake = 0.0
+
+        if state in {"ACKNOWLEDGED", "WAITING_COMMAND", "LISTENING"}:
+            body_forward = 1.5 + 0.7 * math.sin(t * 3.0)
+            claw_open = 2.0
+            tail_raise = 4.0 + 1.5 * math.sin(t * 2.4)
+        elif state == "THINKING":
+            body_forward = 2.0 + 1.2 * math.sin(t * 3.4)
+            claw_open = 4.0
+            tail_raise = 8.0 + 2.5 * math.sin(t * 4.0)
+        elif state == "SPEAKING":
+            # Four-part attack loop: charge -> thrust -> hold -> recoil.
+            cycle = (t * 1.45) % 1.0
+            if cycle < 0.22:
+                p = cycle / 0.22
+                attack = 0.25 * p
+            elif cycle < 0.43:
+                p = (cycle - 0.22) / 0.21
+                attack = 0.25 + 0.75 * (p * p * (3.0 - 2.0 * p))
+            elif cycle < 0.68:
+                attack = 1.0
+            else:
+                p = (cycle - 0.68) / 0.32
+                attack = 1.0 - 0.72 * (p * p * (3.0 - 2.0 * p))
+
+            body_forward = 3.0 + 8.0 * attack
+            body_lift = -1.0 - 2.0 * attack
+            claw_open = 5.0 + 9.0 * attack
+            claw_thrust = 3.0 + 9.0 * attack
+            tail_raise = 10.0 + 12.0 * attack
+            shake = math.sin(t * 26.0) * (0.5 + attack * 0.7)
+        elif state == "ERROR":
+            body_forward = math.sin(t * 17.0) * 2.2
+            body_lift = math.sin(t * 25.0) * 1.2
+            claw_open = 8.0
+            tail_raise = 12.0 + math.sin(t * 18.0) * 4.0
+            shake = math.sin(t * 31.0) * 1.7
+
+        bf = body_forward * scale
+        bl = body_lift * scale
+        co = claw_open * scale
+        ct = claw_thrust * scale
+        tr = tail_raise * scale
+        sh = shake * scale
+
+        canvas.coords(
+            scorpion["body"],
+            cx-16*scale+bf, cy-7*scale+bl,
+            cx-10*scale+bf, cy-18*scale+bl,
+            cx+7*scale+bf,  cy-20*scale+bl,
+            cx+17*scale+bf, cy-7*scale+bl,
+            cx+13*scale+bf, cy+10*scale+bl,
+            cx+bf,          cy+18*scale+bl,
+            cx-13*scale+bf, cy+10*scale+bl,
+        )
+        canvas.coords(
+            scorpion["head"],
+            cx-9*scale+bf, cy-25*scale+bl,
+            cx+bf,         cy-30*scale+bl,
+            cx+9*scale+bf, cy-25*scale+bl,
+            cx+7*scale+bf, cy-16*scale+bl,
+            cx-7*scale+bf, cy-16*scale+bl,
+        )
+
+        mesh_coords = (
+            (cx-10*scale+bf, cy-18*scale+bl, cx+13*scale+bf, cy+10*scale+bl),
+            (cx+7*scale+bf, cy-20*scale+bl, cx-13*scale+bf, cy+10*scale+bl),
+            (cx-16*scale+bf, cy-7*scale+bl, cx+17*scale+bf, cy-7*scale+bl),
+            (cx+bf, cy-29*scale+bl, cx+bf, cy+18*scale+bl),
+        )
+        for item, coords in zip(scorpion["body_mesh"], mesh_coords):
+            canvas.coords(item, *coords)
+
+        leg_shapes = []
+        for dy, spread in ((-8, 3), (0, 7), (8, 11)):
+            leg_shapes.extend([
+                (
+                    cx-12*scale+bf, cy+dy*scale+bl,
+                    cx-(27+spread)*scale, cy+(dy-3)*scale+sh,
+                    cx-(37+spread)*scale, cy+(dy+8)*scale+sh,
+                ),
+                (
+                    cx+12*scale+bf, cy+dy*scale+bl,
+                    cx+(27+spread)*scale, cy+(dy-3)*scale-sh,
+                    cx+(37+spread)*scale, cy+(dy+8)*scale-sh,
+                ),
+            ])
+        for item, coords in zip(scorpion["legs"], leg_shapes):
+            canvas.coords(item, *coords)
+
+        # Attack pose pushes both claws outward and opens the jaws.
+        canvas.coords(
+            scorpion["claw_left_arm"],
+            cx-7*scale+bf, cy-19*scale+bl,
+            cx-25*scale-ct*0.35, cy-29*scale+bl,
+            cx-38*scale-ct, cy-24*scale+bl,
+        )
+        canvas.coords(
+            scorpion["claw_left_top"],
+            cx-38*scale-ct, cy-24*scale+bl,
+            cx-50*scale-ct, cy-33*scale-co+bl,
+            cx-55*scale-ct, cy-28*scale-co*0.7+bl,
+        )
+        canvas.coords(
+            scorpion["claw_left_bottom"],
+            cx-38*scale-ct, cy-24*scale+bl,
+            cx-52*scale-ct, cy-17*scale+co+bl,
+            cx-55*scale-ct, cy-22*scale+co*0.7+bl,
+        )
+        canvas.coords(
+            scorpion["claw_right_arm"],
+            cx+7*scale+bf, cy-19*scale+bl,
+            cx+25*scale+ct*0.35, cy-29*scale+bl,
+            cx+38*scale+ct, cy-24*scale+bl,
+        )
+        canvas.coords(
+            scorpion["claw_right_top"],
+            cx+38*scale+ct, cy-24*scale+bl,
+            cx+50*scale+ct, cy-33*scale-co+bl,
+            cx+55*scale+ct, cy-28*scale-co*0.7+bl,
+        )
+        canvas.coords(
+            scorpion["claw_right_bottom"],
+            cx+38*scale+ct, cy-24*scale+bl,
+            cx+52*scale+ct, cy-17*scale+co+bl,
+            cx+55*scale+ct, cy-22*scale+co*0.7+bl,
+        )
+
+        canvas.coords(
+            scorpion["tail"],
+            cx+4*scale+bf*0.35, cy+15*scale+bl,
+            cx+18*scale, cy+29*scale-tr*0.15,
+            cx+31*scale, cy+25*scale-tr*0.28,
+            cx+37*scale, cy+10*scale-tr*0.45,
+            cx+35*scale, cy-9*scale-tr*0.66,
+            cx+28*scale, cy-26*scale-tr*0.82,
+            cx+16*scale, cy-40*scale-tr,
+            cx+5*scale,  cy-47*scale-tr,
+        )
+        canvas.coords(
+            scorpion["stinger_left"],
+            cx+5*scale, cy-47*scale-tr,
+            cx-2*scale, cy-58*scale-tr,
+        )
+        canvas.coords(
+            scorpion["stinger_right"],
+            cx+5*scale, cy-47*scale-tr,
+            cx+13*scale, cy-55*scale-tr,
+        )
+
+        if state == "THINKING":
+            accent, bright = "#FF6B2D", "#FF9A5A"
+        elif state == "ERROR":
+            accent, bright = "#FF0015", "#FF4050"
+        elif state == "SPEAKING":
+            accent, bright = "#FF101F", "#FF6570"
+        else:
+            accent, bright = THEME["accent"], THEME["accent_bright"]
+
+        line_width = 3 if state == "SPEAKING" else 2
+        for item in scorpion["lines"]:
+            canvas.itemconfigure(item, fill=accent, width=max(1, int(round(line_width * scale))))
+        for item in scorpion["outlines"]:
+            canvas.itemconfigure(item, outline=bright, width=max(1, int(round(2 * scale))))
+        node_radius = (2.3 if state == "SPEAKING" else 1.6) * scale
+        for item in scorpion["nodes"]:
+            x1, y1, x2, y2 = canvas.coords(item)
+            mx = (x1 + x2) / 2.0
+            my = (y1 + y2) / 2.0
+            canvas.coords(
+                item,
+                mx-node_radius, my-node_radius,
+                mx+node_radius, my+node_radius,
+            )
+            canvas.itemconfigure(item, fill=bright)
 
     # Left navigation
     rail = ctk.CTkFrame(root, width=185, corner_radius=0, fg_color=THEME["rail"])
