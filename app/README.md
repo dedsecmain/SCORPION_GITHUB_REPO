@@ -52,9 +52,13 @@ The desktop HUD uses a black/red tactical theme with neon-red borders, controls 
 
 Scorpion now prefers a Qwen-family Ollama model for text, planning, coding and local agent work when it is installed. On lower-memory systems, `qwen3.5:4b` is the preferred starting point; Gemma remains the primary lightweight vision route when available. Ruflo roles reuse the same local Ollama backend sequentially instead of loading one large model per agent.
 
-## Voice and Build Mode reliability
+## Voice and Build Mode 3D
 
-The natural voice default uses `de-DE-SeraphinaMultilingualNeural` with gentler rate/pitch settings and pause-aware text cleanup. Build Mode keeps object selection stable, tolerates brief tracking dropouts, smooths hand motion, tries multiple camera indices/backends and keeps mouse selection active. Thumb+index pinch grabs/moves, two pinched hands moving apart or together enlarge/shrink, and a real palm/wrist twist rotates the selected object. Explicit Größe + / Größe − buttons remain available as a fallback.
+The natural voice default uses `de-DE-SeraphinaMultilingualNeural` with gentler rate/pitch settings and pause-aware text cleanup.
+
+Build Mode is now a lightweight perspective 3D workspace inside the existing desktop UI. It renders shaded triangular meshes over a perspective floor grid, supports camera orbit/zoom, Z-depth movement and real 3D primitives. External local models can be imported with **IMPORT 3D** in OBJ, GLB, GLTF, STL or PLY format. Browser assets should be downloaded first and then imported as local files; Build Mode does not execute embedded scripts or automate arbitrary browser pages.
+
+Gesture controls remain local: thumb+index pinch grabs/moves, two pinched hands moving apart/together enlarge/shrink, and a real palm/wrist twist rotates the selected 3D object. Mouse fallback remains available, including right-drag object rotation, Alt+right-drag camera orbit and Alt+wheel camera zoom. Imported meshes are normalized and very high face counts are capped for interactive rendering on laptop hardware.
 
 ## Ruflo coordination
 
