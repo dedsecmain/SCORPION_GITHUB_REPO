@@ -125,6 +125,58 @@ class OllamaLocalAI:
         if status.state == "model_missing":
             raise LocalModelMissingError(status.detail)
 
+    def respond_agent(
+        self,
+        prompt: str,
+        *,
+        model: str | None = None,
+        system_prompt: str = (
+            "Du bist ein kompakter lokaler Scorpion-Entwicklungsagent. "
+            "Antworte ausschließlich auf Hochdeutsch, präzise und ohne Smalltalk."
+        ),
+        options: dict | None = None,
+        request_timeout: float = 75.0,
+        retry_attempts: int = 0,
+        keep_alive: str = "15m",
+    ) -> str:
+        """Minimal Ollama path for Ruflo agents.
+
+        This intentionally skips Scorpion persona, chat history and long-term
+        memory so small local models spend their context on the actual task.
+        """
+        selected_model = model or self.model
+        payload = {
+            "model": selected_model,
+            "prompt": str(prompt).strip(),
+            "system": str(system_prompt).strip(),
+            "stream": False,
+            "think": False,
+            "keep_alive": keep_alive,
+            "options": {
+                "num_ctx": 2048,
+                "temperature": 0.15,
+                "num_predict": 180,
+                **dict(options or {}),
+            },
+        }
+        try:
+            data = self._request(
+                "POST",
+                f"{self.base_url}/api/generate",
+                payload,
+                float(request_timeout),
+                retry_attempts=retry_attempts,
+            )
+        except OllamaOfflineError as exc:
+            raise OllamaOfflineError(
+                f"Ollama-Agentenlauf ist abgebrochen: {exc}"
+            ) from exc
+
+        content = data.get("response", "")
+        if not isinstance(content, str) or not content.strip():
+            raise RuntimeError("Ollama hat im Agentenmodus keine Textantwort geliefert.")
+        return content.strip()
+
     def respond(
         self,
         user_text: str,
