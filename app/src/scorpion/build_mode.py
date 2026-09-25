@@ -32,6 +32,8 @@ class BuildObject:
     z: float = 0.0
     rotation_y: float = 0.0
     scale: float = 1.0
+    name: str | None = None
+    source_path: str | None = None
 
 
 class BuildModeSession:
@@ -41,7 +43,7 @@ class BuildModeSession:
     are intentionally outside Build Mode and remain confirmation-gated elsewhere.
     """
 
-    ALLOWED_KINDS = {"cube", "sphere", "panel"}
+    ALLOWED_KINDS = {"cube", "sphere", "panel", "mesh"}
 
     def __init__(self, *, select_radius: float = 0.18):
         self.active = False
@@ -71,6 +73,8 @@ class BuildModeSession:
         x: float = 0.5,
         y: float = 0.5,
         z: float = 0.0,
+        name: str | None = None,
+        source_path: str | None = None,
     ) -> BuildObject:
         normalized = str(kind).strip().lower()
         if normalized not in self.ALLOWED_KINDS:
@@ -81,6 +85,8 @@ class BuildModeSession:
             x=self._clamp01(x),
             y=self._clamp01(y),
             z=max(-1.0, min(1.0, float(z))),
+            name=(str(name).strip()[:80] if name else None),
+            source_path=(str(source_path) if source_path else None),
         )
         self._objects[item.id] = item
         return item
