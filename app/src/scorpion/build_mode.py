@@ -129,6 +129,14 @@ class BuildModeSession:
     def clear_selection(self) -> None:
         self.selected_id = None
 
+    def move_depth(self, delta: float) -> BuildObject | None:
+        current = self._objects.get(self.selected_id) if self.selected_id else None
+        if current is None:
+            return None
+        return self._replace_selected(
+            z=max(-1.0, min(1.0, current.z + float(delta)))
+        )
+
     def apply(self, event: BuildGestureEvent) -> BuildObject | None:
         if not self.active:
             return None
