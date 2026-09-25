@@ -37,6 +37,8 @@ class FakeLocalAI:
         options=None,
     ):
         self.calls.append((text, model, think, options))
+        if "schnelles lokales Entwicklungs-Team" in text:
+            return "FAST VALIDATED PLAN"
         if "Scorpion-coder" in text:
             return "CODER PLAN"
         if "Scorpion-tester" in text:
