@@ -545,6 +545,7 @@ def run_app() -> None:
     import customtkinter as ctk
     import tkinter as tk
     import tempfile
+    from PIL import Image, ImageEnhance, ImageTk
     from pathlib import Path
     from tkinter import messagebox
 
@@ -635,6 +636,75 @@ def run_app() -> None:
         "last_state": "STANDBY",
         "state_started": time.monotonic(),
     }
+
+    # Generated red holographic Scorpion asset used by the HUD.  Keep a
+    # code-drawn fallback so a missing/corrupt asset never prevents startup.
+    holo_asset_path = install_root / "assets" / "scorpion_holo_red.jpg"
+    try:
+        holo_source_image = Image.open(holo_asset_path).convert("RGB")
+    except Exception as exc:
+        holo_source_image = None
+        print(f"Holo-Asset konnte nicht geladen werden, Canvas-Fallback aktiv: {exc}")
+
+    def make_holo_frames(base_size: int):
+        if holo_source_image is None:
+            return []
+        specs = (
+            (0.94, 0.78),
+            (0.98, 0.90),
+            (1.00, 1.00),
+            (1.06, 1.10),
+            (1.13, 1.24),
+        )
+        frames = []
+        for scale_factor, brightness in specs:
+            side = max(24, int(round(base_size * scale_factor)))
+            frame = ImageEnhance.Brightness(holo_source_image).enhance(brightness)
+            frame = frame.resize((side, side), Image.Resampling.LANCZOS)
+            frames.append(ImageTk.PhotoImage(frame, master=root))
+        return frames
+
+    def animate_holo_asset(canvas, image_item, frames, state: str, t: float, *, x: float, y: float):
+        if image_item is None or not frames:
+            return
+
+        state = str(state or "STANDBY").upper()
+        frame_index = 2
+        dx = 0.0
+        dy = 0.0
+
+        if state == "SPEAKING":
+            # Charge -> lunge -> hold -> recoil. Scaling toward the viewer keeps
+            # the exact generated model intact while still reading as an attack.
+            cycle = (t * 1.45) % 1.0
+            if cycle < 0.22:
+                p = cycle / 0.22
+                attack = 0.22 * p
+            elif cycle < 0.43:
+                p = (cycle - 0.22) / 0.21
+                attack = 0.22 + 0.78 * (p * p * (3.0 - 2.0 * p))
+            elif cycle < 0.68:
+                attack = 1.0
+            else:
+                p = (cycle - 0.68) / 0.32
+                attack = 1.0 - 0.72 * (p * p * (3.0 - 2.0 * p))
+            frame_index = min(4, 2 + int(round(attack * 2.0)))
+            dx = 3.0 * attack
+            dy = -2.5 * attack
+        elif state == "THINKING":
+            frame_index = 3 if math.sin(t * 4.5) > 0 else 2
+            dy = -1.0
+        elif state in {"ACKNOWLEDGED", "WAITING_COMMAND", "LISTENING"}:
+            frame_index = 2 if math.sin(t * 2.8) > -0.2 else 1
+            dy = -0.5
+        elif state == "ERROR":
+            frame_index = 4 if int(t * 12.0) % 2 else 1
+            dx = 1.5 if int(t * 20.0) % 2 else -1.5
+        else:
+            frame_index = 2 if math.sin(t * 1.8) > 0.55 else 1
+
+        canvas.itemconfigure(image_item, image=frames[frame_index])
+        canvas.coords(image_item, x + dx, y + dy)
 
     def draw_holo_scorpion(canvas, *, cx: float, cy: float, scale: float = 1.0):
         """Draw a custom red low-poly holographic scorpion.
@@ -1058,7 +1128,15 @@ def run_app() -> None:
     brand_canvas.pack(padx=14, pady=(0, 14))
     for y in range(16, 82, 8):
         brand_canvas.create_line(18, y, 138, y, fill=THEME["scanline"], width=1)
-    brand_holo = draw_holo_scorpion(brand_canvas, cx=77, cy=45, scale=0.72)
+    brand_frames = make_holo_frames(66)
+    if brand_frames:
+        brand_holo_image = brand_canvas.create_image(
+            77, 44, image=brand_frames[2], anchor="center"
+        )
+        brand_holo = None
+    else:
+        brand_holo_image = None
+        brand_holo = draw_holo_scorpion(brand_canvas, cx=77, cy=45, scale=0.72)
 
     ctk.CTkLabel(
         rail,
@@ -1129,7 +1207,16 @@ def run_app() -> None:
         fill=THEME["accent_bright"],
         width=1,
     )
-    core_holo = draw_holo_scorpion(core_canvas, cx=75, cy=67, scale=0.78)
+    core_frames = make_holo_frames(82)
+    if core_frames:
+        core_holo_image = core_canvas.create_image(
+            75, 65, image=core_frames[2], anchor="center"
+        )
+        core_canvas.tag_raise(holo_scan)
+        core_holo = None
+    else:
+        core_holo_image = None
+        core_holo = draw_holo_scorpion(core_canvas, cx=75, cy=67, scale=0.78)
     core_canvas.create_text(
         75, 112,
         text="HOLO CORE",
@@ -1331,10 +1418,11 @@ def run_app() -> None:
         core_canvas.itemconfigure(ring_outer, outline=outer)
         core_canvas.itemconfigure(ring_inner, outline=accent, fill=fill)
         holo_runtime["accent"] = accent
-        for item in core_holo["lines"]:
-            core_canvas.itemconfigure(item, fill=accent)
-        for item in core_holo["outlines"]:
-            core_canvas.itemconfigure(item, outline=accent)
+        if core_holo is not None:
+            for item in core_holo["lines"]:
+                core_canvas.itemconfigure(item, fill=accent)
+            for item in core_holo["outlines"]:
+                core_canvas.itemconfigure(item, outline=accent)
         voice_state_label.configure(text_color=accent)
         hint_map = {
             "STANDBY": 'Sag „Scorpion“',
@@ -1378,11 +1466,34 @@ def run_app() -> None:
         core_canvas.coords(holo_scan, 39, scan_y, 111, scan_y)
         core_canvas.itemconfigure(holo_scan, fill=accent)
 
-        update_holo_scorpion(core_canvas, core_holo, state, state_time)
-        update_holo_scorpion(brand_canvas, brand_holo, state, state_time * 0.86)
+        if core_holo_image is not None:
+            animate_holo_asset(
+                core_canvas,
+                core_holo_image,
+                core_frames,
+                state,
+                state_time,
+                x=75,
+                y=65,
+            )
+        elif core_holo is not None:
+            update_holo_scorpion(core_canvas, core_holo, state, state_time)
 
-        # Small controlled hologram instability in ERROR only.
-        if state == "ERROR" and phase % 3 == 0:
+        if brand_holo_image is not None:
+            animate_holo_asset(
+                brand_canvas,
+                brand_holo_image,
+                brand_frames,
+                state,
+                state_time * 0.86,
+                x=77,
+                y=44,
+            )
+        elif brand_holo is not None:
+            update_holo_scorpion(brand_canvas, brand_holo, state, state_time * 0.86)
+
+        # Small controlled hologram instability only affects the vector fallback.
+        if state == "ERROR" and phase % 3 == 0 and core_holo is not None:
             core_canvas.move(core_holo["head"], 1 if phase % 2 else -1, 0)
 
         root.after(55, animate_holo)
