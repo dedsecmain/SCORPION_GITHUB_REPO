@@ -723,8 +723,16 @@ def run_app() -> None:
         font=ctk.CTkFont(size=10, weight="bold"),
         text_color=THEME["muted"],
     ).pack(anchor="w", padx=16, pady=(0, 6))
-    mode_menu = ctk.CTkSegmentedButton(
+    mode_frame = ctk.CTkFrame(
         rail,
+        fg_color="transparent",
+        corner_radius=10,
+        border_width=1,
+        border_color=THEME["border_hot"],
+    )
+    mode_frame.pack(fill="x", padx=12, pady=(0, 18))
+    mode_menu = ctk.CTkSegmentedButton(
+        mode_frame,
         values=["LOCAL", "HYBRID", "CLOUD"],
         height=34,
         fg_color=THEME["panel_alt"],
@@ -733,7 +741,7 @@ def run_app() -> None:
         unselected_color=THEME["panel_alt"],
         unselected_hover_color=THEME["cyan_dim"],
     )
-    mode_menu.pack(fill="x", padx=12, pady=(0, 18))
+    mode_menu.pack(fill="x", padx=1, pady=1)
     mode_menu.set(controller.mode.value)
 
     nav = ctk.CTkFrame(rail, fg_color="transparent")
