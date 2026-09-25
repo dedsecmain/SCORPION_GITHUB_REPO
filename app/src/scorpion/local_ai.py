@@ -125,6 +125,8 @@ class OllamaLocalAI:
         model: str | None = None,
         context=None,
         memory_context: str | None = None,
+        think: bool | str | None = None,
+        options: dict | None = None,
     ) -> str:
         selected_model = model or self.model
         self._require_ready(selected_model)
@@ -149,6 +151,10 @@ class OllamaLocalAI:
         messages.append(user_message)
 
         payload = {"model": selected_model, "messages": messages, "stream": False}
+        if think is not None:
+            payload["think"] = think
+        if options:
+            payload["options"] = dict(options)
         try:
             data = self._request("POST", f"{self.base_url}/api/chat", payload, self.timeout)
         except OllamaOfflineError as exc:
