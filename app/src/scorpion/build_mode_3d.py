@@ -212,11 +212,12 @@ class Software3DRenderer:
 
     def draw_grid(self, canvas, width: int, height: int, *, line_color: str, axis_color: str):
         for value in np.linspace(-5.0, 5.0, 11):
-            for start, end in (
-                (np.array([[value, -1.35, -5.0], [value, -1.35, 5.0]])),
-                (np.array([[-5.0, -1.35, value], [5.0, -1.35, value]])),
-            ):
-                p = self.project(start, width, height)
+            segments = (
+                np.array([[value, -1.35, -5.0], [value, -1.35, 5.0]], dtype=float),
+                np.array([[-5.0, -1.35, value], [5.0, -1.35, value]], dtype=float),
+            )
+            for segment in segments:
+                p = self.project(segment, width, height)
                 canvas.create_line(
                     p[0, 0], p[0, 1], p[1, 0], p[1, 1],
                     fill=line_color,
