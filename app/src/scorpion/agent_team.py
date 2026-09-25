@@ -4,7 +4,7 @@ import time
 from dataclasses import dataclass
 
 from .context_engine import analyze_context
-from .model_router import ModelRouter, TaskKind
+from .model_router import ModelRoute, ModelRouter, TaskKind
 
 
 @dataclass(frozen=True)
@@ -73,16 +73,33 @@ class LocalAgentTeam:
         prior = ""
         stages: list[AgentStageResult] = []
 
-        # Choose one local model for the whole team so a low-memory laptop does
-        # not thrash RAM by swapping different large models between stages.
-        route = self.model_router.route(
-            TaskKind.REASONING,
-            complexity=0.9 if deep else 0.65,
-            priority="balanced",
+        # Ruflo agents deliberately prefer the small Qwen backend and ignore
+        # historical health penalties caused by earlier timeout-heavy builds.
+        # This prevents the agent path from silently falling back to Gemma.
+        installed = set(getattr(self.model_router, "installed_models", set()) or set())
+        model = next(
+            (
+                candidate
+                for candidate in ("qwen3.5:4b", "qwen3:4b", "qwen3:8b", "gemma3:4b")
+                if candidate in installed
+            ),
+            None,
         )
-        model = route.model
+        if model is None:
+            fallback = self.model_router.route(
+                TaskKind.REASONING,
+                complexity=0.65,
+                priority="speed",
+            )
+            model = fallback.model
         if not model:
             raise RuntimeError("Kein lokales Modell für Ruflo-Agenten verfügbar.")
+        route = ModelRoute(
+            provider="local",
+            model=model,
+            requires_approval=False,
+            reason="Ruflo-Agentenpfad · Qwen-first · kompakter Kontext",
+        )
 
         if not deep:
             role = "fast-team"
@@ -98,14 +115,21 @@ class LocalAgentTeam:
             started = time.monotonic()
             success = False
             try:
-                output = self.local_ai.respond(
+                output = self.local_ai.respond_agent(
                     prompt,
-                    history=(),
                     model=model,
-                    context=context,
-                    memory_context=None,
-                    think=False,
-                    options={"temperature": 0.2, "num_predict": 420},
+                    system_prompt=(
+                        "Du bist Scorpions lokales Fast-Team. "
+                        "Liefere nur Lösung, wichtigste Tests und Freigabehinweis."
+                    ),
+                    options={
+                        "temperature": 0.15,
+                        "num_ctx": 1536,
+                        "num_predict": 180,
+                    },
+                    request_timeout=75.0,
+                    retry_attempts=0,
+                    keep_alive="15m",
                 )
                 success = bool(str(output).strip())
             finally:
@@ -143,21 +167,25 @@ class LocalAgentTeam:
             started = time.monotonic()
             success = False
             deep_limits = {
-                "coder": {"num_predict": 320, "temperature": 0.2},
-                "tester": {"num_predict": 240, "temperature": 0.15},
-                "production-validator": {"num_predict": 220, "temperature": 0.15},
+                "coder": {"num_ctx": 1536, "num_predict": 140, "temperature": 0.15},
+                "tester": {"num_ctx": 1536, "num_predict": 110, "temperature": 0.10},
+                "production-validator": {"num_ctx": 1536, "num_predict": 90, "temperature": 0.10},
             }
             try:
-                output = self.local_ai.respond(
+                output = self.local_ai.respond_agent(
                     prompt,
-                    history=(),
                     model=model,
-                    context=context,
-                    memory_context=None,
-                    think=False,
-                    options=deep_limits.get(role, {"num_predict": 240, "temperature": 0.2}),
-                    request_timeout=85.0,
+                    system_prompt=(
+                        f"Du bist Scorpions lokaler {role}. "
+                        "Bleibe technisch, kurz und prüfbar."
+                    ),
+                    options=deep_limits.get(
+                        role,
+                        {"num_ctx": 1536, "num_predict": 110, "temperature": 0.15},
+                    ),
+                    request_timeout=75.0,
                     retry_attempts=0,
+                    keep_alive="15m",
                 )
                 success = bool(str(output).strip())
             finally:
