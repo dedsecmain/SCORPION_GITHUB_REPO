@@ -46,12 +46,27 @@ class FakeLocalAI:
         return "VALIDATED PLAN"
 
 
-def test_local_agent_team_reuses_one_qwen_backend_sequentially():
+def test_local_agent_team_fast_mode_uses_one_qwen_call():
     ai = FakeLocalAI()
     router = FakeRouter()
     team = LocalAgentTeam(ai, router)
 
     result = team.run("Verbessere den Build Mode")
+
+    assert [stage.role for stage in result.stages] == ["fast-team"]
+    assert result.stages[0].model == "qwen3.5:4b"
+    assert len(ai.calls) == 1
+    assert len(router.routes) == 1
+    assert len(router.results) == 1
+    assert router.results[0][1] is True
+
+
+def test_local_agent_team_deep_mode_keeps_three_specialists():
+    ai = FakeLocalAI()
+    router = FakeRouter()
+    team = LocalAgentTeam(ai, router)
+
+    result = team.run("Verbessere den Build Mode", deep=True)
 
     assert [stage.role for stage in result.stages] == [
         "coder",
@@ -61,10 +76,8 @@ def test_local_agent_team_reuses_one_qwen_backend_sequentially():
     assert {stage.model for stage in result.stages} == {"qwen3.5:4b"}
     assert result.final_output == "VALIDATED PLAN"
     assert len(ai.calls) == 3
-    assert all(model == "qwen3.5:4b" for _prompt, model in ai.calls)
     assert len(router.routes) == 1
     assert len(router.results) == 3
-    assert all(success is True for _model, success, _latency in router.results)
 
 
 def test_local_agent_team_reports_progress_for_each_stage():
@@ -80,10 +93,6 @@ def test_local_agent_team_reports_progress_for_each_stage():
     team.run("Verbessere die Wakeword-Erkennung")
 
     assert progress == [
-        ("coder", "start", "qwen3.5:4b"),
-        ("coder", "done", "qwen3.5:4b"),
-        ("tester", "start", "qwen3.5:4b"),
-        ("tester", "done", "qwen3.5:4b"),
-        ("production-validator", "start", "qwen3.5:4b"),
-        ("production-validator", "done", "qwen3.5:4b"),
+        ("fast-team", "start", "qwen3.5:4b"),
+        ("fast-team", "done", "qwen3.5:4b"),
     ]
