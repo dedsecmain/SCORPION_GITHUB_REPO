@@ -12,6 +12,23 @@ from .build_mode_3d import (
 from .gesture_tracker import WebcamGestureTracker
 
 
+def coalesce_build_events(events: list[BuildGestureEvent]) -> list[BuildGestureEvent]:
+    """Discard stale consecutive drag positions without dropping state changes."""
+    compact: list[BuildGestureEvent] = []
+    pending: BuildGestureEvent | None = None
+    for event in events:
+        if event.gesture is BuildGesture.PINCH_MOVE:
+            pending = event
+            continue
+        if pending is not None:
+            compact.append(pending)
+            pending = None
+        compact.append(event)
+    if pending is not None:
+        compact.append(pending)
+    return compact
+
+
 class BuildModeWindow:
     """Interactive 3D Build Mode with gesture + mouse fallback."""
 
@@ -308,18 +325,20 @@ class BuildModeWindow:
             self.status.configure(text="GESTURES STARTING", text_color=self.theme["cyan"])
 
     def _drain_events(self) -> bool:
-        changed = False
+        pending: list[BuildGestureEvent] = []
         while True:
             try:
-                event = self._events.get_nowait()
+                pending.append(self._events.get_nowait())
             except queue.Empty:
                 break
+        if not pending:
+            return False
+        for event in coalesce_build_events(pending):
             if event.gesture is BuildGesture.PINCH_START and event.x is not None and event.y is not None:
                 self._select_projected(event.x, event.y)
             else:
                 self.session.apply(event)
-            changed = True
-        return changed
+        return True
 
     def _tick(self) -> None:
         if not self.window.winfo_exists():
