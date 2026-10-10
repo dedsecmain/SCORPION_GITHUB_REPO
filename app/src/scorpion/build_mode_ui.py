@@ -7,6 +7,23 @@ from .build_mode import BuildGesture, BuildGestureEvent, BuildModeSession
 from .gesture_tracker import WebcamGestureTracker
 
 
+def coalesce_build_events(events: list[BuildGestureEvent]) -> list[BuildGestureEvent]:
+    """Drop stale consecutive drag samples while preserving state changes."""
+    compact: list[BuildGestureEvent] = []
+    pending_move: BuildGestureEvent | None = None
+    for event in events:
+        if event.gesture is BuildGesture.PINCH_MOVE:
+            pending_move = event
+            continue
+        if pending_move is not None:
+            compact.append(pending_move)
+            pending_move = None
+        compact.append(event)
+    if pending_move is not None:
+        compact.append(pending_move)
+    return compact
+
+
 class BuildModeWindow:
     """Interactive local Build Mode workspace with gesture + mouse fallback."""
 
@@ -163,15 +180,17 @@ class BuildModeWindow:
             self.status.configure(text="GESTURES STARTING", text_color=self.theme["cyan"])
 
     def _drain_events(self) -> bool:
-        changed = False
+        pending: list[BuildGestureEvent] = []
         while True:
             try:
-                event = self._events.get_nowait()
+                pending.append(self._events.get_nowait())
             except queue.Empty:
                 break
+        if not pending:
+            return False
+        for event in coalesce_build_events(pending):
             self.session.apply(event)
-            changed = True
-        return changed
+        return True
 
     def _tick(self) -> None:
         if not self.window.winfo_exists():

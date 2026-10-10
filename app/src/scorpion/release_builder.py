@@ -86,8 +86,8 @@ def build_release(app_root: Path | str, output_dir: Path | str, *, version: str)
     app_root = Path(app_root).resolve()
     output_dir = Path(output_dir).resolve()
     version = str(version).strip()
-    if not version.startswith("v") or version != "v74.0.1":
-        raise ValueError("MK74.0.1 release version must be v74.0.1")
+    if not version.startswith("v") or version != "v74.0.2":
+        raise ValueError("MK74.0.2 release version must be v74.0.2")
 
     update_files = _update_files(app_root)
     full_files = _full_files(app_root, update_files)
@@ -123,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build deterministic Scorpion MK74 release assets.")
     parser.add_argument("--app-root", default=".")
     parser.add_argument("--out", required=True)
-    parser.add_argument("--version", default="v74.0.1")
+    parser.add_argument("--version", default="v74.0.2")
     args = parser.parse_args(argv)
     result = build_release(args.app_root, args.out, version=args.version)
     print(result.manifest_path)

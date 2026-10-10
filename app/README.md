@@ -1,8 +1,12 @@
-# 🦂 SCORPION MK74.0.1
+# 🦂 SCORPION MK74.0.2
 
-Scorpion MK74.0.1 fixes the update self-check rollback bug and builds on the signed MK50 stability core and adds a stricter autonomy model plus proactive intelligence.
+Scorpion MK74.0.2 stabilizes Build Mode gesture tracking and builds on the signed MK50 stability core and adds a stricter autonomy model plus proactive intelligence.
 
-## Hotfix
+## Build Mode stabilization
+
+MK74.0.2 adds pinch hysteresis, short tracking-dropout tolerance, landmark smoothing, transform spike guards and drag-event coalescing. These changes target jitter, accidental release/re-grab loops, reversed-feeling jumps and laggy object motion while preserving mouse fallback.
+
+## Previous hotfix
 
 The release self-check now validates technical capability without requiring the user's persisted Wakeword or Windows-autostart switches to be enabled. User preferences may be disabled without causing rollback. Fresh-install defaults remain enabled.
 

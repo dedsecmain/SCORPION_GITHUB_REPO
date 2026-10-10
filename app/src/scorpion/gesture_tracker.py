@@ -50,23 +50,53 @@ def _distance(a, b) -> float:
 
 
 class GestureInterpreter:
-    """Turns normalized 21-point hand landmarks into stable Build Mode events."""
+    """Turns normalized hand landmarks into stable Build Mode events.
+
+    MK74.0.2 adds hysteresis, short dropout tolerance, EMA smoothing and
+    transform spike guards so noisy webcam tracking cannot constantly grab,
+    release or fling virtual objects.
+    """
 
     def __init__(
         self,
         *,
         pinch_threshold: float = 0.065,
+        pinch_release_threshold: float = 0.085,
         middle_pinch_threshold: float = 0.055,
+        middle_release_threshold: float = 0.075,
         rotation_gain: float = 260.0,
         mirror_x: bool = True,
+        smoothing: float = 0.35,
+        dropout_grace_frames: int = 2,
+        max_rotation_step: float = 12.0,
+        max_scale_step: float = 1.12,
+        scale_deadzone: float = 0.03,
     ):
         self.pinch_threshold = float(pinch_threshold)
+        self.pinch_release_threshold = max(
+            self.pinch_threshold,
+            float(pinch_release_threshold),
+        )
         self.middle_pinch_threshold = float(middle_pinch_threshold)
+        self.middle_release_threshold = max(
+            self.middle_pinch_threshold,
+            float(middle_release_threshold),
+        )
         self.rotation_gain = float(rotation_gain)
         self.mirror_x = bool(mirror_x)
+        self.smoothing = max(0.05, min(1.0, float(smoothing)))
+        self.dropout_grace_frames = max(0, int(dropout_grace_frames))
+        self.max_rotation_step = max(1.0, float(max_rotation_step))
+        self.max_scale_step = max(1.001, float(max_scale_step))
+        self.scale_deadzone = max(0.0, float(scale_deadzone))
+
         self._single_pinched = False
+        self._pinch_states = [False, False]
+        self._middle_pinched = False
         self._last_middle_x: float | None = None
         self._two_hand_baseline: float | None = None
+        self._missing_frames = 0
+        self._smoothed: dict[tuple[int, int], tuple[float, float]] = {}
 
     @staticmethod
     def _valid(hand) -> bool:
@@ -76,73 +106,139 @@ class GestureInterpreter:
         x, y = float(point[0]), float(point[1])
         return (1.0 - x if self.mirror_x else x), y
 
+    def _smooth_workspace_point(
+        self,
+        hand_index: int,
+        landmark_index: int,
+        point,
+    ) -> tuple[float, float]:
+        current = self._workspace_point(point)
+        key = (int(hand_index), int(landmark_index))
+        previous = self._smoothed.get(key)
+        if previous is None:
+            smoothed = current
+        else:
+            alpha = self.smoothing
+            smoothed = (
+                previous[0] + alpha * (current[0] - previous[0]),
+                previous[1] + alpha * (current[1] - previous[1]),
+            )
+        self._smoothed[key] = smoothed
+        return smoothed
+
+    @staticmethod
+    def _clamp(value: float, low: float, high: float) -> float:
+        return max(low, min(high, float(value)))
+
+    def _index_pinch_state(self, hand_index: int, distance: float) -> bool:
+        previous = self._pinch_states[hand_index]
+        if previous:
+            active = distance <= self.pinch_release_threshold
+        else:
+            active = distance <= self.pinch_threshold
+        self._pinch_states[hand_index] = active
+        return active
+
+    def _middle_pinch_state(self, distance: float) -> bool:
+        if self._middle_pinched:
+            active = distance <= self.middle_release_threshold
+        else:
+            active = distance <= self.middle_pinch_threshold
+        self._middle_pinched = active
+        return active
+
     def _release_single_pinch(self, events: list[BuildGestureEvent]) -> None:
         if self._single_pinched:
             events.append(BuildGestureEvent(BuildGesture.PINCH_END))
             self._single_pinched = False
 
+    def _hard_reset_tracking(self, events: list[BuildGestureEvent]) -> None:
+        self._release_single_pinch(events)
+        self._pinch_states = [False, False]
+        self._middle_pinched = False
+        self._last_middle_x = None
+        self._two_hand_baseline = None
+        self._smoothed.clear()
+
     def update(self, hands) -> list[BuildGestureEvent]:
         valid = [hand for hand in hands if self._valid(hand)][:2]
         events: list[BuildGestureEvent] = []
+
         if not valid:
-            if self._single_pinched:
-                events.append(BuildGestureEvent(BuildGesture.PINCH_END))
-            self._single_pinched = False
-            self._last_middle_x = None
-            self._two_hand_baseline = None
+            self._missing_frames += 1
+            if self._missing_frames <= self.dropout_grace_frames:
+                return events
+            self._hard_reset_tracking(events)
             return events
 
-        index_pinches = [
-            _distance(hand[4], hand[8]) <= self.pinch_threshold
-            for hand in valid
-        ]
+        self._missing_frames = 0
+
+        # MediaPipe may swap hand order frame-to-frame. Stable left-to-right
+        # ordering prevents the smoothing state from jumping between hands.
+        valid.sort(key=lambda hand: float(hand[8][0]))
+
+        index_pinches: list[bool] = []
+        for index, hand in enumerate(valid):
+            distance = _distance(hand[4], hand[8])
+            index_pinches.append(self._index_pinch_state(index, distance))
+        for index in range(len(valid), 2):
+            self._pinch_states[index] = False
 
         if len(valid) >= 2 and all(index_pinches[:2]):
-            p1, p2 = valid[0][8], valid[1][8]
+            p1 = self._smooth_workspace_point(0, 8, valid[0][8])
+            p2 = self._smooth_workspace_point(1, 8, valid[1][8])
             span = max(0.02, _distance(p1, p2))
             if self._two_hand_baseline is None:
                 self._two_hand_baseline = span
                 if not self._single_pinched:
-                    p1x, p1y = self._workspace_point(p1)
-                    p2x, p2y = self._workspace_point(p2)
-                    x = (p1x + p2x) / 2.0
-                    y = (p1y + p2y) / 2.0
+                    x = (p1[0] + p2[0]) / 2.0
+                    y = (p1[1] + p2[1]) / 2.0
                     events.append(BuildGestureEvent(BuildGesture.PINCH_START, x=x, y=y))
                     self._single_pinched = True
             else:
-                ratio = span / max(0.02, self._two_hand_baseline)
-                if abs(ratio - 1.0) >= 0.03:
+                raw_ratio = span / max(0.02, self._two_hand_baseline)
+                if abs(raw_ratio - 1.0) >= self.scale_deadzone:
+                    minimum = 1.0 / self.max_scale_step
+                    ratio = self._clamp(raw_ratio, minimum, self.max_scale_step)
                     events.append(BuildGestureEvent(BuildGesture.SCALE, value=ratio))
                     self._two_hand_baseline = span
+            self._last_middle_x = None
+            self._middle_pinched = False
             return events
 
         self._two_hand_baseline = None
         hand = valid[0]
-        index_tip = hand[8]
         index_pinch = index_pinches[0]
-        middle_pinch = _distance(hand[4], hand[12]) <= self.middle_pinch_threshold
+        middle_distance = _distance(hand[4], hand[12])
+        middle_pinch = self._middle_pinch_state(middle_distance)
 
         if middle_pinch and not index_pinch:
             self._release_single_pinch(events)
-            x, _ = self._workspace_point(hand[12])
+            x, _ = self._smooth_workspace_point(0, 12, hand[12])
             if self._last_middle_x is not None:
                 delta = (x - self._last_middle_x) * self.rotation_gain
                 if abs(delta) >= 1.0:
+                    delta = self._clamp(
+                        delta,
+                        -self.max_rotation_step,
+                        self.max_rotation_step,
+                    )
                     events.append(BuildGestureEvent(BuildGesture.ROTATE, value=delta))
             self._last_middle_x = x
             return events
+
         self._last_middle_x = None
 
         if index_pinch:
-            x, y = self._workspace_point(index_tip)
+            x, y = self._smooth_workspace_point(0, 8, hand[8])
             if not self._single_pinched:
                 events.append(BuildGestureEvent(BuildGesture.PINCH_START, x=x, y=y))
                 self._single_pinched = True
             else:
                 events.append(BuildGestureEvent(BuildGesture.PINCH_MOVE, x=x, y=y))
         elif self._single_pinched:
-            events.append(BuildGestureEvent(BuildGesture.PINCH_END))
-            self._single_pinched = False
+            self._release_single_pinch(events)
+
         return events
 
 
