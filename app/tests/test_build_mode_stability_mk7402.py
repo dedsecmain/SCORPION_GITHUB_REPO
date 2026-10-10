@@ -74,3 +74,24 @@ def test_scale_ratio_is_clamped_against_two_hand_tracking_spikes():
     scales = [e for e in events if e.gesture is BuildGesture.SCALE]
     assert scales
     assert scales[0].value <= 1.12
+
+
+def test_motion_event_coalescing_keeps_only_latest_consecutive_drag():
+    from scorpion.build_mode import BuildGestureEvent
+    from scorpion.build_mode_ui import coalesce_build_events
+
+    events = [
+        BuildGestureEvent(BuildGesture.PINCH_START, x=0.5, y=0.5),
+        BuildGestureEvent(BuildGesture.PINCH_MOVE, x=0.52, y=0.50),
+        BuildGestureEvent(BuildGesture.PINCH_MOVE, x=0.60, y=0.42),
+        BuildGestureEvent(BuildGesture.PINCH_MOVE, x=0.70, y=0.30),
+        BuildGestureEvent(BuildGesture.ROTATE, value=4.0),
+    ]
+    compact = coalesce_build_events(events)
+    assert [event.gesture for event in compact] == [
+        BuildGesture.PINCH_START,
+        BuildGesture.PINCH_MOVE,
+        BuildGesture.ROTATE,
+    ]
+    assert compact[1].x == 0.70
+    assert compact[1].y == 0.30
