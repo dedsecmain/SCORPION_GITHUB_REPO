@@ -4,9 +4,18 @@ Official update repository for **Scorpion MK74**, a Windows-first local-first AI
 
 ## Current release
 
-`v74.0.1`
+`v74.0.2`
 
-MK74.0.1 is the hotfix release for the MK74 autonomy, personality and proactive-intelligence update. It keeps MK50 Build Mode, Ollama recovery, always-on wake and Windows autostart while adding a central permission model for what Scorpion may do locally versus what must wait for explicit approval.
+MK74.0.2 is the Build Mode stability hotfix for the MK74 autonomy, personality and proactive-intelligence line. It keeps MK50 Build Mode, Ollama recovery, always-on wake and Windows autostart while adding a central permission model for what Scorpion may do locally versus what must wait for explicit approval.
+
+## MK74.0.2 Build Mode hotfix
+
+- Pinch hysteresis prevents rapid grab/release chatter near the detection threshold.
+- Short camera tracking dropouts no longer instantly release the selected object.
+- EMA smoothing reduces hand landmark jitter during drag operations.
+- Rotation and scale spikes are clamped to safe per-frame steps.
+- Two-hand ordering is stabilized to avoid transform jumps when MediaPipe swaps hand order.
+- Consecutive stale drag events are coalesced in the UI queue.
 
 ## MK74.0.1 hotfix
 
