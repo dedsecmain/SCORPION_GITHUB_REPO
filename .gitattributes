@@ -11,3 +11,5 @@ release/v74.0.0/manifest.json text eol=lf
 release/v74.0.0/manifest.sig.b64 text eol=lf
 release/v74.0.1/manifest.json text eol=lf
 release/v74.0.1/manifest.sig.b64 text eol=lf
+release/v74.0.2/manifest.json text eol=lf
+release/v74.0.2/manifest.sig.b64 text eol=lf
