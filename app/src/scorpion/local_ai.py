@@ -64,20 +64,29 @@ class OllamaLocalAI:
         self.retry_delay = max(0.0, float(retry_delay))
         self._sleep = sleep_fn or time.sleep
 
-    def _request(self, method: str, url: str, payload: dict | None, timeout: float) -> dict:
+    def _request(
+        self,
+        method: str,
+        url: str,
+        payload: dict | None,
+        timeout: float,
+        *,
+        retry_attempts: int | None = None,
+    ) -> dict:
         last_error: Exception | None = None
-        for attempt in range(self.retry_attempts + 1):
+        attempts = self.retry_attempts if retry_attempts is None else max(0, min(5, int(retry_attempts)))
+        for attempt in range(attempts + 1):
             try:
                 return self.transport(method, url, payload, timeout)
             except (OllamaOfflineError, OSError, error.URLError, TimeoutError) as exc:
                 last_error = exc
-                if attempt >= self.retry_attempts:
+                if attempt >= attempts:
                     break
                 delay = self.retry_delay * (2 ** attempt)
                 if delay > 0:
                     self._sleep(delay)
         raise OllamaOfflineError(
-            f"Ollama ist nach {self.retry_attempts + 1} Versuchen nicht erreichbar: {last_error}"
+            f"Ollama ist nach {attempts + 1} Versuchen nicht erreichbar: {last_error}"
         ) from last_error
 
     def available_models(self) -> set[str]:
@@ -116,6 +125,58 @@ class OllamaLocalAI:
         if status.state == "model_missing":
             raise LocalModelMissingError(status.detail)
 
+    def respond_agent(
+        self,
+        prompt: str,
+        *,
+        model: str | None = None,
+        system_prompt: str = (
+            "Du bist ein kompakter lokaler Scorpion-Entwicklungsagent. "
+            "Antworte ausschließlich auf Hochdeutsch, präzise und ohne Smalltalk."
+        ),
+        options: dict | None = None,
+        request_timeout: float = 75.0,
+        retry_attempts: int = 0,
+        keep_alive: str = "15m",
+    ) -> str:
+        """Minimal Ollama path for Ruflo agents.
+
+        This intentionally skips Scorpion persona, chat history and long-term
+        memory so small local models spend their context on the actual task.
+        """
+        selected_model = model or self.model
+        payload = {
+            "model": selected_model,
+            "prompt": str(prompt).strip(),
+            "system": str(system_prompt).strip(),
+            "stream": False,
+            "think": False,
+            "keep_alive": keep_alive,
+            "options": {
+                "num_ctx": 2048,
+                "temperature": 0.15,
+                "num_predict": 180,
+                **dict(options or {}),
+            },
+        }
+        try:
+            data = self._request(
+                "POST",
+                f"{self.base_url}/api/generate",
+                payload,
+                float(request_timeout),
+                retry_attempts=retry_attempts,
+            )
+        except OllamaOfflineError as exc:
+            raise OllamaOfflineError(
+                f"Ollama-Agentenlauf ist abgebrochen: {exc}"
+            ) from exc
+
+        content = data.get("response", "")
+        if not isinstance(content, str) or not content.strip():
+            raise RuntimeError("Ollama hat im Agentenmodus keine Textantwort geliefert.")
+        return content.strip()
+
     def respond(
         self,
         user_text: str,
@@ -125,6 +186,10 @@ class OllamaLocalAI:
         model: str | None = None,
         context=None,
         memory_context: str | None = None,
+        think: bool | str | None = None,
+        options: dict | None = None,
+        request_timeout: float | None = None,
+        retry_attempts: int | None = None,
     ) -> str:
         selected_model = model or self.model
         self._require_ready(selected_model)
@@ -149,8 +214,18 @@ class OllamaLocalAI:
         messages.append(user_message)
 
         payload = {"model": selected_model, "messages": messages, "stream": False}
+        if think is not None:
+            payload["think"] = think
+        if options:
+            payload["options"] = dict(options)
         try:
-            data = self._request("POST", f"{self.base_url}/api/chat", payload, self.timeout)
+            data = self._request(
+                "POST",
+                f"{self.base_url}/api/chat",
+                payload,
+                float(request_timeout if request_timeout is not None else self.timeout),
+                retry_attempts=retry_attempts,
+            )
         except OllamaOfflineError as exc:
             raise OllamaOfflineError(
                 f"Ollama-Verbindung ist während der Anfrage abgebrochen: {exc}"

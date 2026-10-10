@@ -172,3 +172,99 @@ def test_ollama_retry_is_bounded_and_reports_offline():
     status = ai.status()
     assert status.state == "offline"
     assert transport.calls == 3
+
+
+def test_respond_supports_thinking_and_generation_options():
+    transport = FakeTransport(tags={"models": [{"name": "qwen3.5:4b"}]})
+    ai = OllamaLocalAI("http://127.0.0.1:11434", "qwen3.5:4b", transport=transport)
+
+    ai.respond(
+        "schnell",
+        think=False,
+        options={"temperature": 0.2, "num_predict": 420},
+    )
+
+    payload = transport.calls[-1][2]
+    assert payload["think"] is False
+    assert payload["options"]["temperature"] == 0.2
+    assert payload["options"]["num_predict"] == 420
+
+
+def test_chat_request_can_disable_retries_and_override_timeout():
+    class TimeoutThenSuccessTransport:
+        def __init__(self):
+            self.chat_calls = 0
+            self.calls = []
+
+        def __call__(self, method, url, payload=None, timeout=5.0):
+            self.calls.append((method, url, payload, timeout))
+            if url.endswith("/api/tags"):
+                return {"models": [{"name": "qwen3.5:4b"}]}
+            if url.endswith("/api/chat"):
+                self.chat_calls += 1
+                raise TimeoutError("slow local generation")
+            raise AssertionError(url)
+
+    transport = TimeoutThenSuccessTransport()
+    ai = OllamaLocalAI(
+        "http://127.0.0.1:11434",
+        "qwen3.5:4b",
+        transport=transport,
+        retry_attempts=2,
+        retry_delay=0,
+    )
+
+    with pytest.raises(OllamaOfflineError) as exc:
+        ai.respond(
+            "deep",
+            request_timeout=85.0,
+            retry_attempts=0,
+        )
+
+    assert transport.chat_calls == 1
+    chat_call = [call for call in transport.calls if call[1].endswith("/api/chat")][0]
+    assert chat_call[3] == 85.0
+    assert "nach 1 Versuchen" in str(exc.value)
+
+
+def test_respond_agent_uses_minimal_generate_payload():
+    transport = FakeTransport(
+        tags={"models": [{"name": "qwen3.5:4b"}]},
+        chat_response={"response": "kompakte agentenantwort"},
+    )
+
+    class GenerateTransport(FakeTransport):
+        def __call__(self, method, url, payload=None, timeout=5.0):
+            self.calls.append((method, url, payload, timeout))
+            if url.endswith("/api/generate"):
+                return {"response": "kompakte agentenantwort"}
+            if url.endswith("/api/tags"):
+                return self.tags
+            raise AssertionError(url)
+
+    transport = GenerateTransport(tags={"models": [{"name": "qwen3.5:4b"}]})
+    ai = OllamaLocalAI("http://127.0.0.1:11434", "qwen3.5:4b", transport=transport)
+
+    answer = ai.respond_agent(
+        "Wakeword verbessern",
+        model="qwen3.5:4b",
+        system_prompt="Kompakter Agent.",
+        options={"num_ctx": 1536, "num_predict": 120},
+        request_timeout=75.0,
+        retry_attempts=0,
+        keep_alive="15m",
+    )
+
+    assert answer == "kompakte agentenantwort"
+    method, url, payload, timeout = transport.calls[-1]
+    assert method == "POST"
+    assert url.endswith("/api/generate")
+    assert timeout == 75.0
+    assert payload["model"] == "qwen3.5:4b"
+    assert payload["system"] == "Kompakter Agent."
+    assert payload["prompt"] == "Wakeword verbessern"
+    assert payload["think"] is False
+    assert payload["keep_alive"] == "15m"
+    assert payload["options"]["num_ctx"] == 1536
+    assert payload["options"]["num_predict"] == 120
+    assert "messages" not in payload
