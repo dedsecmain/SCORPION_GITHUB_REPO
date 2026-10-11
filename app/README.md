@@ -58,3 +58,12 @@ python -m pytest -q
 $env:PYTHONPATH = (Resolve-Path src)
 python -m scorpion.selfcheck
 ```
+
+
+## Unified RED HOLO and Ruflo (MK74.0.3)
+
+This integration combines the previously separate RED HOLO CORE, Ruflo/Qwen local coordination,
+3D Build Mode with optional local mesh import, and the MK74.0.2 gesture stability fixes.
+The signed release includes hologram assets, and Windows autostart uses a version-independent
+Scorpion.cmd launcher with verified migration of the old Scorpion MK50.cmd launcher.
+Local AI stays local-first; cloud actions, mutating tasks, and update installation require approval.
