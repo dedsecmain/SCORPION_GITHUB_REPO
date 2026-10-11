@@ -121,7 +121,7 @@ def test_autostart_writes_idempotent_startup_launcher(tmp_path):
 
     assert first.enabled is True
     assert second.changed is False
-    launcher = startup / "Scorpion MK50.cmd"
+    launcher = startup / "Scorpion.cmd"
     text = launcher.read_text(encoding="utf-8")
     assert "pythonw.exe" in text
     assert str(app_root) in text
