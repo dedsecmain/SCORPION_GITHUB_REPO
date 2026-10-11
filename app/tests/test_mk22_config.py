@@ -2,8 +2,8 @@ from scorpion import __version__
 from scorpion.config import Settings
 
 
-def test_mk74_0_2_version():
-    assert __version__ == "74.0.2"
+def test_mk74_0_3_version():
+    assert __version__ == "74.0.3"
 
 
 def test_default_natural_voice_is_high_german(monkeypatch):
