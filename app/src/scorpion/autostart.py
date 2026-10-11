@@ -37,11 +37,25 @@ def ensure_windows_autostart(
     if startup is None:
         return AutostartStatus(False, False, None, "Windows Startup-Ordner konnte nicht bestimmt werden.")
 
-    launcher = startup / "Scorpion MK50.cmd"
+    launcher = startup / "Scorpion.cmd"
+    legacy = startup / "Scorpion MK50.cmd"
+
+    def is_our_legacy_launcher() -> bool:
+        if not legacy.is_file():
+            return False
+        try:
+            previous = legacy.read_text(encoding="utf-8")
+        except OSError:
+            return False
+        return "PYTHONPATH=" in previous and "-m scorpion" in previous
+
     if not enabled:
         changed = launcher.exists()
         if changed:
             launcher.unlink()
+        if is_our_legacy_launcher():
+            legacy.unlink()
+            changed = True
         return AutostartStatus(False, changed, launcher, "Scorpion-Autostart ist deaktiviert.")
 
     pythonw = root / ".venv" / "Scripts" / "pythonw.exe"
@@ -60,11 +74,15 @@ def ensure_windows_autostart(
     changed = previous != content
     if changed:
         launcher.write_text(content, encoding="utf-8")
+    # Only remove the old file after the new launcher was written.
+    if is_our_legacy_launcher():
+        legacy.unlink()
+        changed = True
     return AutostartStatus(True, changed, launcher, "Scorpion startet beim Windows-Login automatisch.")
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Configure Scorpion MK50 Windows autostart.")
+    parser = argparse.ArgumentParser(description="Configure Scorpion Windows autostart.")
     parser.add_argument("--app-root", default=".")
     parser.add_argument("--disable", action="store_true")
     args = parser.parse_args(argv)

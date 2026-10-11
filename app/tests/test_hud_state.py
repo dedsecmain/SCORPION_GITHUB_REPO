@@ -1,4 +1,4 @@
-from scorpion.hud import SystemPanelModel, VoiceVisualState
+from scorpion.hud import RED_HOLO_STATE_PALETTE, THEME, SystemPanelModel, VoiceVisualState
 
 
 def test_waiting_state_shows_twenty_second_countdown():
@@ -30,3 +30,19 @@ def test_system_model_carries_local_screen_context_status():
     )
     assert model.active_app_label == "notepad.exe"
     assert model.screen_context_label == "LOCAL CONTEXT ACTIVE"
+
+
+
+def test_red_holo_theme_is_red_first():
+    assert THEME["bg"] == "#030304"
+    assert THEME["accent"].startswith("#FF")
+    assert THEME["cyan"] == "#FF1F2D"
+    assert THEME["border_hot"] == "#B5121B"
+
+
+def test_all_voice_states_have_red_holo_palette_entries():
+    assert set(RED_HOLO_STATE_PALETTE) == set(VoiceVisualState)
+    for outer, fill, accent in RED_HOLO_STATE_PALETTE.values():
+        assert outer.startswith("#")
+        assert fill.startswith("#")
+        assert accent.startswith("#")

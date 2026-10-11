@@ -1,3 +1,3 @@
 """Scorpion MK74 adaptive local-first desktop assistant."""
 
-__version__ = "74.0.2"
+__version__ = "74.0.3"

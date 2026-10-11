@@ -30,6 +30,16 @@ def test_natural_voice_defaults(monkeypatch):
     monkeypatch.delenv("SCORPION_NATURAL_VOICE_RATE", raising=False)
     monkeypatch.delenv("SCORPION_NATURAL_VOICE_ENABLED", raising=False)
     settings = Settings.from_env()
-    assert settings.natural_voice == "de-DE-KatjaNeural"
-    assert settings.natural_voice_rate == "-4%"
+    assert settings.natural_voice == "de-DE-SeraphinaMultilingualNeural"
+    assert settings.natural_voice_rate == "-2%"
     assert settings.natural_voice_enabled is True
+
+
+def test_legacy_robotic_voice_settings_are_migrated(monkeypatch):
+    monkeypatch.setenv("SCORPION_NATURAL_VOICE", "de-DE-KatjaNeural")
+    monkeypatch.setenv("SCORPION_NATURAL_VOICE_RATE", "-4%")
+    monkeypatch.setenv("SCORPION_NATURAL_VOICE_PITCH", "+0Hz")
+    settings = Settings.from_env()
+    assert settings.natural_voice == "de-DE-SeraphinaMultilingualNeural"
+    assert settings.natural_voice_rate == "-2%"
+    assert settings.natural_voice_pitch == "-1Hz"

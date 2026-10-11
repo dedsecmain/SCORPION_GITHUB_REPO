@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import math
 import threading
 import time
 import traceback
 from collections.abc import Callable
+from pathlib import Path
 
+from .agent_team import LocalAgentTeam
 from .actions import (
     execute_preflighted_action,
     execute_windows_action,
@@ -25,7 +28,7 @@ from .commands import CommandKind, parse_command
 from .config import Mode, Settings
 from .context_engine import analyze_context
 from .handoff import ChatGPTHandoff, HandoffResult
-from .hud import THEME, SystemPanelModel, VoiceVisualState
+from .hud import RED_HOLO_STATE_PALETTE, THEME, SystemPanelModel, VoiceVisualState
 from .improvement_advisor import ImprovementAdvisor
 from .hardware import HardwareProfiler
 from .listener import ContinuousWakeListener
@@ -38,6 +41,7 @@ from .memory import ConversationMemory
 from .proactive_engine import ProactiveEngine
 from .long_term_memory import LongTermMemoryStore
 from .router import AssistantRouter, RouteStatus
+from .ruflo_orchestrator import RufloCommandError, RufloOrchestrator
 from .screen import ScreenService
 from .screen_context import ScreenContextMonitor
 from .updater import Updater, UpdateVerificationError
@@ -62,6 +66,8 @@ class ScorpionController:
         adaptive_store=None,
         hardware_profiler=None,
         model_manager=None,
+        ruflo=None,
+        agent_team=None,
     ):
         self.settings = settings
         self.mode = settings.mode
@@ -76,6 +82,12 @@ class ScorpionController:
         self.proactive_engine = ProactiveEngine()
         self.hardware_profiler = hardware_profiler or HardwareProfiler()
         self.model_manager = model_manager or ModelManager()
+        self.ruflo = ruflo or RufloOrchestrator(
+            enabled=settings.ruflo_enabled,
+            command=settings.ruflo_command,
+            cwd=Path(__file__).resolve().parents[2],
+            max_agents=settings.ruflo_max_agents,
+        )
 
         bootstrap_model = settings.local_model or "gemma3:4b"
         self.local_ai = local_ai or OllamaLocalAI(settings.ollama_url, bootstrap_model)
@@ -121,6 +133,7 @@ class ScorpionController:
             installed_models=installed_models,
             adaptive_store=self.adaptive,
         )
+        self.agent_team = agent_team or LocalAgentTeam(self.local_ai, self.model_router)
         self.camera = CameraService()
         self.screen = ScreenService()
         self.screen_context = ScreenContextMonitor(interval_ms=settings.screen_context_interval_ms)
@@ -139,17 +152,37 @@ class ScorpionController:
     def _auto_select_models(self) -> tuple[str, str]:
         saved_text = self.adaptive.get("text_model")
         saved_vision = self.adaptive.get("vision_model")
-        if saved_text and saved_vision:
-            return str(saved_text), str(saved_vision)
         try:
             profile = self.hardware_profiler.profile()
             self.hardware_profile = profile
         except Exception:
             profile = "low"
         try:
-            installed = self.local_ai.available_models()
+            installed = set(self.local_ai.available_models())
         except Exception:
             installed = set()
+
+        # Migrate the historical lightweight Gemma text default to the new
+        # Qwen-first setup once Qwen 3.5 is actually present. Other explicit
+        # user choices remain untouched.
+        if (
+            saved_text == "gemma3:4b"
+            and "qwen3.5:4b" in installed
+        ):
+            saved_text = "qwen3.5:4b"
+            try:
+                self.adaptive.set("text_model", saved_text)
+            except Exception:
+                pass
+
+        if (
+            saved_text
+            and saved_vision
+            and str(saved_text) in installed
+            and str(saved_vision) in installed
+        ):
+            return str(saved_text), str(saved_vision)
+
         recommendation = self.model_manager.recommend(profile, installed)
         return recommendation.text_model, recommendation.vision_model
 
@@ -222,6 +255,7 @@ class ScorpionController:
             "route_reason": self.last_route_reason,
             "improvements": len(self.improvement_advisor.pending()),
             "autonomy": "LOCAL-FIRST",
+            "ruflo": "ENABLED" if self.ruflo.enabled else "OFF",
             "proactive": (
                 self.last_proactive_suggestion.title
                 if self.last_proactive_suggestion is not None
@@ -347,6 +381,54 @@ class ScorpionController:
 
     def handle(self, text: str, image_bytes: bytes | None = None) -> str:
         command = parse_command(text)
+        if command.kind is CommandKind.RUFLO_STATUS:
+            status = self.ruflo.status()
+            if status.available:
+                version = f" · {status.version}" if status.version else ""
+                return f"RUFLO READY{version} · lokal erreichbar."
+            return f"RUFLO OFFLINE · {status.detail}"
+
+        if command.kind is CommandKind.RUFLO_PLAN:
+            objective = command.target or text
+            approved = self.action_approval_callback(
+                "Ruflo darf lokale Koordinationsdaten für diese Entwicklungsaufgabe anlegen:\n\n"
+                f"{objective}"
+            )
+            decision = self.autonomy_policy.decide(
+                AutonomyKind.MUTATING,
+                approved=approved,
+            )
+            if not decision.allowed:
+                return "RUFLO BLOCKED · Die lokale Koordination wurde nicht freigegeben."
+            try:
+                plan = self.ruflo.prepare_task(objective)
+            except (RufloCommandError, ValueError) as exc:
+                return f"RUFLO BLOCKED · {exc}"
+
+            agents = ", ".join(plan.agents)
+            deep_mode = any(
+                marker in objective.casefold()
+                for marker in ("tief", "gründlich", "gruendlich", "deep mode", "tiefenanalyse")
+            )
+            try:
+                team = self.agent_team.run(objective, deep=deep_mode)
+            except Exception as exc:
+                return (
+                    f"RUFLO PLAN READY · {agents} · "
+                    f"Lokales Agenten-Team konnte nicht ausgeführt werden: {exc}. "
+                    "Keine Code- oder Update-Änderung wurde automatisch angewendet."
+                )
+
+            models = ", ".join(
+                f"{stage.role}:{stage.model}" for stage in team.stages
+            )
+            return (
+                f"RUFLO + LOCAL TEAM READY · {agents}\n"
+                f"MODEL ROUTES · {models}\n\n"
+                f"{team.final_output}\n\n"
+                "Keine Code- oder Update-Änderung wurde automatisch angewendet."
+            )
+
         if command.kind is CommandKind.BUILD_MODE:
             return "BUILD MODE READY · Öffne den lokalen Workspace über die Desktop-Oberfläche."
         if command.kind is CommandKind.OPEN_APP and command.target:
@@ -463,6 +545,7 @@ def run_app() -> None:
     import customtkinter as ctk
     import tkinter as tk
     import tempfile
+    from PIL import Image, ImageEnhance, ImageTk
     from pathlib import Path
     from tkinter import messagebox
 
@@ -479,7 +562,7 @@ def run_app() -> None:
     ctk.set_appearance_mode("dark")
 
     root = ctk.CTk(fg_color=THEME["bg"])
-    root.title("SCORPION MK74")
+    root.title("SCORPION MK74 · RED HOLO CORE")
     root.geometry("1400x840")
     root.minsize(1120, 700)
     root.grid_columnconfigure(0, weight=0, minsize=185)
@@ -523,11 +606,14 @@ def run_app() -> None:
         approved = {"value": False}
 
         def show_dialog() -> None:
-            approved["value"] = messagebox.askyesno(
-                "Scorpion · Aktion bestätigen",
-                reason + "\n\nNur mit Ja wird diese konkrete Freigabe erteilt.",
-            )
-            done.set()
+            try:
+                approved["value"] = messagebox.askyesno(
+                    "Scorpion · Aktion bestätigen",
+                    reason + "\n\nNur mit Ja wird diese konkrete Freigabe erteilt.",
+                    parent=root,
+                )
+            finally:
+                done.set()
 
         root.after(0, show_dialog)
         done.wait()
@@ -543,23 +629,514 @@ def run_app() -> None:
     wake_listener: ContinuousWakeListener | None = None
     build_mode_ref: dict[str, object | None] = {"window": None}
     voice_runtime = {"state": "STANDBY", "deadline": None}
+    holo_runtime = {
+        "accent": THEME["accent"],
+        "phase": 0,
+        "started": time.monotonic(),
+        "last_state": "STANDBY",
+        "state_started": time.monotonic(),
+    }
+
+    # Generated red holographic Scorpion asset used by the HUD.  Keep a
+    # code-drawn fallback so a missing/corrupt asset never prevents startup.
+    holo_asset_path = install_root / "assets" / "scorpion_holo_red.jpg"
+    try:
+        holo_source_image = Image.open(holo_asset_path).convert("RGB")
+    except Exception as exc:
+        holo_source_image = None
+        print(f"Holo-Asset konnte nicht geladen werden, Canvas-Fallback aktiv: {exc}")
+
+    def make_holo_frames(base_size: int):
+        if holo_source_image is None:
+            return []
+        specs = (
+            (0.94, 0.78),
+            (0.98, 0.90),
+            (1.00, 1.00),
+            (1.06, 1.10),
+            (1.13, 1.24),
+        )
+        frames = []
+        for scale_factor, brightness in specs:
+            side = max(24, int(round(base_size * scale_factor)))
+            frame = ImageEnhance.Brightness(holo_source_image).enhance(brightness)
+            frame = frame.resize((side, side), Image.Resampling.LANCZOS)
+            frames.append(ImageTk.PhotoImage(frame, master=root))
+        return frames
+
+    def animate_holo_asset(canvas, image_item, frames, state: str, t: float, *, x: float, y: float):
+        if image_item is None or not frames:
+            return
+
+        state = str(state or "STANDBY").upper()
+        frame_index = 2
+        dx = 0.0
+        dy = 0.0
+
+        if state == "SPEAKING":
+            # Charge -> lunge -> hold -> recoil. Scaling toward the viewer keeps
+            # the exact generated model intact while still reading as an attack.
+            cycle = (t * 1.45) % 1.0
+            if cycle < 0.22:
+                p = cycle / 0.22
+                attack = 0.22 * p
+            elif cycle < 0.43:
+                p = (cycle - 0.22) / 0.21
+                attack = 0.22 + 0.78 * (p * p * (3.0 - 2.0 * p))
+            elif cycle < 0.68:
+                attack = 1.0
+            else:
+                p = (cycle - 0.68) / 0.32
+                attack = 1.0 - 0.72 * (p * p * (3.0 - 2.0 * p))
+            frame_index = min(4, 2 + int(round(attack * 2.0)))
+            dx = 3.0 * attack
+            dy = -2.5 * attack
+        elif state == "THINKING":
+            frame_index = 3 if math.sin(t * 4.5) > 0 else 2
+            dy = -1.0
+        elif state in {"ACKNOWLEDGED", "WAITING_COMMAND", "LISTENING"}:
+            frame_index = 2 if math.sin(t * 2.8) > -0.2 else 1
+            dy = -0.5
+        elif state == "ERROR":
+            frame_index = 4 if int(t * 12.0) % 2 else 1
+            dx = 1.5 if int(t * 20.0) % 2 else -1.5
+        else:
+            frame_index = 2 if math.sin(t * 1.8) > 0.55 else 1
+
+        canvas.itemconfigure(image_item, image=frames[frame_index])
+        canvas.coords(image_item, x + dx, y + dy)
+
+    def draw_holo_scorpion(canvas, *, cx: float, cy: float, scale: float = 1.0):
+        """Draw a custom red low-poly holographic scorpion.
+
+        Every major limb is retained as its own Canvas item so voice states can
+        animate the pose without redrawing the whole HUD every frame.
+        """
+        line_ids = []
+        outline_ids = []
+        node_ids = []
+
+        def line(*coords, width=1.6, smooth=False, glow=False):
+            if glow:
+                canvas.create_line(
+                    *coords,
+                    fill="#4A0710",
+                    width=max(2, int(round((width + 2.5) * scale))),
+                    smooth=smooth,
+                    capstyle="round",
+                    joinstyle="round",
+                )
+            item = canvas.create_line(
+                *coords,
+                fill=THEME["accent"],
+                width=max(1, int(round(width * scale))),
+                smooth=smooth,
+                capstyle="round",
+                joinstyle="round",
+            )
+            line_ids.append(item)
+            return item
+
+        def polygon(*coords, width=1.6):
+            item = canvas.create_polygon(
+                *coords,
+                fill="",
+                outline=THEME["accent_bright"],
+                width=max(1, int(round(width * scale))),
+                joinstyle="round",
+            )
+            outline_ids.append(item)
+            return item
+
+        def node(x, y, radius=1.7):
+            r = max(1.0, radius * scale)
+            item = canvas.create_oval(
+                x-r, y-r, x+r, y+r,
+                fill=THEME["accent_bright"],
+                outline="",
+            )
+            node_ids.append(item)
+            return item
+
+        # Angular body shell + internal triangulation gives a low-poly wireframe.
+        body = polygon(
+            cx-16*scale, cy-7*scale,
+            cx-10*scale, cy-18*scale,
+            cx+7*scale, cy-20*scale,
+            cx+17*scale, cy-7*scale,
+            cx+13*scale, cy+10*scale,
+            cx,          cy+18*scale,
+            cx-13*scale, cy+10*scale,
+        )
+        head = polygon(
+            cx-9*scale, cy-25*scale,
+            cx,         cy-30*scale,
+            cx+9*scale, cy-25*scale,
+            cx+7*scale, cy-16*scale,
+            cx-7*scale, cy-16*scale,
+        )
+        body_mesh = [
+            line(cx-10*scale, cy-18*scale, cx+13*scale, cy+10*scale),
+            line(cx+7*scale, cy-20*scale, cx-13*scale, cy+10*scale),
+            line(cx-16*scale, cy-7*scale, cx+17*scale, cy-7*scale),
+            line(cx, cy-29*scale, cx, cy+18*scale),
+        ]
+
+        # Three articulated legs per side.
+        legs = []
+        for dy, spread in ((-8, 3), (0, 7), (8, 11)):
+            left = line(
+                cx-12*scale, cy+dy*scale,
+                cx-(27+spread)*scale, cy+(dy-3)*scale,
+                cx-(37+spread)*scale, cy+(dy+8)*scale,
+                width=1.5,
+            )
+            right = line(
+                cx+12*scale, cy+dy*scale,
+                cx+(27+spread)*scale, cy+(dy-3)*scale,
+                cx+(37+spread)*scale, cy+(dy+8)*scale,
+                width=1.5,
+            )
+            legs.extend([left, right])
+
+        # Claws are split into arm, upper jaw and lower jaw so SPEAKING can
+        # open and thrust them independently.
+        claw_left_arm = line(
+            cx-7*scale, cy-19*scale,
+            cx-25*scale, cy-29*scale,
+            cx-38*scale, cy-24*scale,
+            width=2.0,
+            glow=True,
+        )
+        claw_left_top = line(
+            cx-38*scale, cy-24*scale,
+            cx-50*scale, cy-33*scale,
+            cx-55*scale, cy-28*scale,
+            width=1.8,
+        )
+        claw_left_bottom = line(
+            cx-38*scale, cy-24*scale,
+            cx-52*scale, cy-17*scale,
+            cx-55*scale, cy-22*scale,
+            width=1.8,
+        )
+        claw_right_arm = line(
+            cx+7*scale, cy-19*scale,
+            cx+25*scale, cy-29*scale,
+            cx+38*scale, cy-24*scale,
+            width=2.0,
+            glow=True,
+        )
+        claw_right_top = line(
+            cx+38*scale, cy-24*scale,
+            cx+50*scale, cy-33*scale,
+            cx+55*scale, cy-28*scale,
+            width=1.8,
+        )
+        claw_right_bottom = line(
+            cx+38*scale, cy-24*scale,
+            cx+52*scale, cy-17*scale,
+            cx+55*scale, cy-22*scale,
+            width=1.8,
+        )
+
+        # Segmented rising tail with a bright stinger.
+        tail = line(
+            cx+4*scale,  cy+15*scale,
+            cx+18*scale, cy+29*scale,
+            cx+31*scale, cy+25*scale,
+            cx+37*scale, cy+10*scale,
+            cx+35*scale, cy-9*scale,
+            cx+28*scale, cy-26*scale,
+            cx+16*scale, cy-40*scale,
+            cx+5*scale,  cy-47*scale,
+            width=2.7,
+            smooth=True,
+            glow=True,
+        )
+        stinger_left = line(
+            cx+5*scale, cy-47*scale,
+            cx-2*scale, cy-58*scale,
+            width=2.0,
+        )
+        stinger_right = line(
+            cx+5*scale, cy-47*scale,
+            cx+13*scale, cy-55*scale,
+            width=2.0,
+        )
+
+        # Bright vertices mimic the energy nodes from a polygonal hologram.
+        node_specs = [
+            (-55, -28), (-55, -22), (55, -28), (55, -22),
+            (-38, -24), (38, -24), (-16, -7), (17, -7),
+            (0, -29), (0, 0), (0, 18), (18, 29), (37, 10),
+            (28, -26), (16, -40), (5, -47), (-2, -58),
+        ]
+        for dx, dy in node_specs:
+            node(cx+dx*scale, cy+dy*scale, 1.8 if dy < -40 else 1.4)
+
+        return {
+            "lines": line_ids,
+            "outlines": outline_ids,
+            "nodes": node_ids,
+            "node_specs": node_specs,
+            "body": body,
+            "head": head,
+            "body_mesh": body_mesh,
+            "legs": legs,
+            "claw_left_arm": claw_left_arm,
+            "claw_left_top": claw_left_top,
+            "claw_left_bottom": claw_left_bottom,
+            "claw_right_arm": claw_right_arm,
+            "claw_right_top": claw_right_top,
+            "claw_right_bottom": claw_right_bottom,
+            "tail": tail,
+            "stinger_left": stinger_left,
+            "stinger_right": stinger_right,
+            "cx": cx,
+            "cy": cy,
+            "scale": scale,
+        }
+
+    def update_holo_scorpion(canvas, scorpion, state: str, t: float) -> None:
+        """Animate the hologram pose for the current voice state."""
+        cx = scorpion["cx"]
+        cy = scorpion["cy"]
+        scale = scorpion["scale"]
+        state = str(state or "STANDBY").upper()
+
+        idle = math.sin(t * 2.0)
+        body_forward = 0.0
+        body_lift = idle * 0.6
+        claw_open = 0.0
+        claw_thrust = 0.0
+        tail_raise = 0.0
+        shake = 0.0
+
+        if state in {"ACKNOWLEDGED", "WAITING_COMMAND", "LISTENING"}:
+            body_forward = 1.5 + 0.7 * math.sin(t * 3.0)
+            claw_open = 2.0
+            tail_raise = 4.0 + 1.5 * math.sin(t * 2.4)
+        elif state == "THINKING":
+            body_forward = 2.0 + 1.2 * math.sin(t * 3.4)
+            claw_open = 4.0
+            tail_raise = 8.0 + 2.5 * math.sin(t * 4.0)
+        elif state == "SPEAKING":
+            # Four-part attack loop: charge -> thrust -> hold -> recoil.
+            cycle = (t * 1.45) % 1.0
+            if cycle < 0.22:
+                p = cycle / 0.22
+                attack = 0.25 * p
+            elif cycle < 0.43:
+                p = (cycle - 0.22) / 0.21
+                attack = 0.25 + 0.75 * (p * p * (3.0 - 2.0 * p))
+            elif cycle < 0.68:
+                attack = 1.0
+            else:
+                p = (cycle - 0.68) / 0.32
+                attack = 1.0 - 0.72 * (p * p * (3.0 - 2.0 * p))
+
+            body_forward = 3.0 + 8.0 * attack
+            body_lift = -1.0 - 2.0 * attack
+            claw_open = 5.0 + 9.0 * attack
+            claw_thrust = 3.0 + 9.0 * attack
+            tail_raise = 10.0 + 12.0 * attack
+            shake = math.sin(t * 26.0) * (0.5 + attack * 0.7)
+        elif state == "ERROR":
+            body_forward = math.sin(t * 17.0) * 2.2
+            body_lift = math.sin(t * 25.0) * 1.2
+            claw_open = 8.0
+            tail_raise = 12.0 + math.sin(t * 18.0) * 4.0
+            shake = math.sin(t * 31.0) * 1.7
+
+        bf = body_forward * scale
+        bl = body_lift * scale
+        co = claw_open * scale
+        ct = claw_thrust * scale
+        tr = tail_raise * scale
+        sh = shake * scale
+
+        canvas.coords(
+            scorpion["body"],
+            cx-16*scale+bf, cy-7*scale+bl,
+            cx-10*scale+bf, cy-18*scale+bl,
+            cx+7*scale+bf,  cy-20*scale+bl,
+            cx+17*scale+bf, cy-7*scale+bl,
+            cx+13*scale+bf, cy+10*scale+bl,
+            cx+bf,          cy+18*scale+bl,
+            cx-13*scale+bf, cy+10*scale+bl,
+        )
+        canvas.coords(
+            scorpion["head"],
+            cx-9*scale+bf, cy-25*scale+bl,
+            cx+bf,         cy-30*scale+bl,
+            cx+9*scale+bf, cy-25*scale+bl,
+            cx+7*scale+bf, cy-16*scale+bl,
+            cx-7*scale+bf, cy-16*scale+bl,
+        )
+
+        mesh_coords = (
+            (cx-10*scale+bf, cy-18*scale+bl, cx+13*scale+bf, cy+10*scale+bl),
+            (cx+7*scale+bf, cy-20*scale+bl, cx-13*scale+bf, cy+10*scale+bl),
+            (cx-16*scale+bf, cy-7*scale+bl, cx+17*scale+bf, cy-7*scale+bl),
+            (cx+bf, cy-29*scale+bl, cx+bf, cy+18*scale+bl),
+        )
+        for item, coords in zip(scorpion["body_mesh"], mesh_coords):
+            canvas.coords(item, *coords)
+
+        leg_shapes = []
+        for dy, spread in ((-8, 3), (0, 7), (8, 11)):
+            leg_shapes.extend([
+                (
+                    cx-12*scale+bf, cy+dy*scale+bl,
+                    cx-(27+spread)*scale, cy+(dy-3)*scale+sh,
+                    cx-(37+spread)*scale, cy+(dy+8)*scale+sh,
+                ),
+                (
+                    cx+12*scale+bf, cy+dy*scale+bl,
+                    cx+(27+spread)*scale, cy+(dy-3)*scale-sh,
+                    cx+(37+spread)*scale, cy+(dy+8)*scale-sh,
+                ),
+            ])
+        for item, coords in zip(scorpion["legs"], leg_shapes):
+            canvas.coords(item, *coords)
+
+        # Attack pose pushes both claws outward and opens the jaws.
+        canvas.coords(
+            scorpion["claw_left_arm"],
+            cx-7*scale+bf, cy-19*scale+bl,
+            cx-25*scale-ct*0.35, cy-29*scale+bl,
+            cx-38*scale-ct, cy-24*scale+bl,
+        )
+        canvas.coords(
+            scorpion["claw_left_top"],
+            cx-38*scale-ct, cy-24*scale+bl,
+            cx-50*scale-ct, cy-33*scale-co+bl,
+            cx-55*scale-ct, cy-28*scale-co*0.7+bl,
+        )
+        canvas.coords(
+            scorpion["claw_left_bottom"],
+            cx-38*scale-ct, cy-24*scale+bl,
+            cx-52*scale-ct, cy-17*scale+co+bl,
+            cx-55*scale-ct, cy-22*scale+co*0.7+bl,
+        )
+        canvas.coords(
+            scorpion["claw_right_arm"],
+            cx+7*scale+bf, cy-19*scale+bl,
+            cx+25*scale+ct*0.35, cy-29*scale+bl,
+            cx+38*scale+ct, cy-24*scale+bl,
+        )
+        canvas.coords(
+            scorpion["claw_right_top"],
+            cx+38*scale+ct, cy-24*scale+bl,
+            cx+50*scale+ct, cy-33*scale-co+bl,
+            cx+55*scale+ct, cy-28*scale-co*0.7+bl,
+        )
+        canvas.coords(
+            scorpion["claw_right_bottom"],
+            cx+38*scale+ct, cy-24*scale+bl,
+            cx+52*scale+ct, cy-17*scale+co+bl,
+            cx+55*scale+ct, cy-22*scale+co*0.7+bl,
+        )
+
+        canvas.coords(
+            scorpion["tail"],
+            cx+4*scale+bf*0.35, cy+15*scale+bl,
+            cx+18*scale, cy+29*scale-tr*0.15,
+            cx+31*scale, cy+25*scale-tr*0.28,
+            cx+37*scale, cy+10*scale-tr*0.45,
+            cx+35*scale, cy-9*scale-tr*0.66,
+            cx+28*scale, cy-26*scale-tr*0.82,
+            cx+16*scale, cy-40*scale-tr,
+            cx+5*scale,  cy-47*scale-tr,
+        )
+        canvas.coords(
+            scorpion["stinger_left"],
+            cx+5*scale, cy-47*scale-tr,
+            cx-2*scale, cy-58*scale-tr,
+        )
+        canvas.coords(
+            scorpion["stinger_right"],
+            cx+5*scale, cy-47*scale-tr,
+            cx+13*scale, cy-55*scale-tr,
+        )
+
+        if state == "THINKING":
+            accent, bright = "#FF6B2D", "#FF9A5A"
+        elif state == "ERROR":
+            accent, bright = "#FF0015", "#FF4050"
+        elif state == "SPEAKING":
+            accent, bright = "#FF101F", "#FF6570"
+        else:
+            accent, bright = THEME["accent"], THEME["accent_bright"]
+
+        line_width = 3 if state == "SPEAKING" else 2
+        for item in scorpion["lines"]:
+            canvas.itemconfigure(item, fill=accent, width=max(1, int(round(line_width * scale))))
+        for item in scorpion["outlines"]:
+            canvas.itemconfigure(item, outline=bright, width=max(1, int(round(2 * scale))))
+        node_radius = (2.3 if state == "SPEAKING" else 1.6) * scale
+        for item, (dx, dy) in zip(scorpion["nodes"], scorpion["node_specs"]):
+            nx = cx + dx*scale
+            ny = cy + dy*scale
+
+            # Body/head nodes move with the torso; claw and tail nodes follow
+            # their attack direction so the holographic vertices stay attached.
+            if -20 <= dx <= 20 and -35 <= dy <= 20:
+                nx += bf
+                ny += bl
+            elif dx <= -30:
+                nx -= ct
+                ny += bl
+            elif dx >= 30 and dy > -35:
+                nx += ct
+                ny += bl
+            elif dy <= -35:
+                ny -= tr
+
+            canvas.coords(
+                item,
+                nx-node_radius, ny-node_radius,
+                nx+node_radius, ny+node_radius,
+            )
+            canvas.itemconfigure(item, fill=bright)
 
     # Left navigation
-    rail = ctk.CTkFrame(root, width=185, corner_radius=0, fg_color="#0C1118")
+    rail = ctk.CTkFrame(root, width=185, corner_radius=0, fg_color=THEME["rail"])
     rail.grid(row=0, column=0, sticky="nsew")
     rail.grid_propagate(False)
     ctk.CTkLabel(
         rail,
         text="SCORPION",
         font=ctk.CTkFont(size=22, weight="bold"),
-        text_color=THEME["text"],
-    ).pack(anchor="w", padx=16, pady=(24, 0))
+        text_color=THEME["accent_bright"],
+    ).pack(anchor="w", padx=16, pady=(20, 0))
     ctk.CTkLabel(
         rail,
-        text="MK50 · STABILITY CORE",
+        text="RED HOLO CORE · MK74",
         font=ctk.CTkFont(size=10, weight="bold"),
-        text_color=THEME["cyan"],
-    ).pack(anchor="w", padx=16, pady=(2, 20))
+        text_color=THEME["accent"],
+    ).pack(anchor="w", padx=16, pady=(2, 8))
+
+    brand_canvas = tk.Canvas(
+        rail,
+        width=155,
+        height=88,
+        bg=THEME["rail"],
+        highlightthickness=0,
+    )
+    brand_canvas.pack(padx=14, pady=(0, 14))
+    for y in range(16, 82, 8):
+        brand_canvas.create_line(18, y, 138, y, fill=THEME["scanline"], width=1)
+    brand_frames = make_holo_frames(66)
+    if brand_frames:
+        brand_holo_image = brand_canvas.create_image(
+            77, 44, image=brand_frames[2], anchor="center"
+        )
+        brand_holo = None
+    else:
+        brand_holo_image = None
+        brand_holo = draw_holo_scorpion(brand_canvas, cx=77, cy=45, scale=0.72)
 
     ctk.CTkLabel(
         rail,
@@ -567,8 +1144,25 @@ def run_app() -> None:
         font=ctk.CTkFont(size=10, weight="bold"),
         text_color=THEME["muted"],
     ).pack(anchor="w", padx=16, pady=(0, 6))
-    mode_menu = ctk.CTkSegmentedButton(rail, values=["LOCAL", "HYBRID", "CLOUD"], height=34)
-    mode_menu.pack(fill="x", padx=12, pady=(0, 18))
+    mode_frame = ctk.CTkFrame(
+        rail,
+        fg_color="transparent",
+        corner_radius=10,
+        border_width=1,
+        border_color=THEME["border_hot"],
+    )
+    mode_frame.pack(fill="x", padx=12, pady=(0, 18))
+    mode_menu = ctk.CTkSegmentedButton(
+        mode_frame,
+        values=["LOCAL", "HYBRID", "CLOUD"],
+        height=34,
+        fg_color=THEME["panel_alt"],
+        selected_color=THEME["accent"],
+        selected_hover_color=THEME["accent_bright"],
+        unselected_color=THEME["panel_alt"],
+        unselected_hover_color=THEME["cyan_dim"],
+    )
+    mode_menu.pack(fill="x", padx=1, pady=1)
     mode_menu.set(controller.mode.value)
 
     nav = ctk.CTkFrame(rail, fg_color="transparent")
@@ -586,29 +1180,55 @@ def run_app() -> None:
         corner_radius=22,
         fg_color=THEME["panel"],
         border_width=1,
-        border_color=THEME["border"],
+        border_color=THEME["border_hot"],
     )
     core_panel.grid(row=0, column=0, sticky="ew", pady=(0, 12))
     core_panel.grid_columnconfigure(1, weight=1)
 
     core_canvas = tk.Canvas(
         core_panel,
-        width=130,
+        width=150,
         height=130,
         bg=THEME["panel"],
         highlightthickness=0,
     )
     core_canvas.grid(row=0, column=0, rowspan=2, padx=18, pady=18)
-    ring_outer = core_canvas.create_oval(12, 12, 118, 118, outline=THEME["cyan_dim"], width=4)
-    ring_inner = core_canvas.create_oval(28, 28, 102, 102, fill="#0C2631", outline=THEME["cyan"], width=2)
-    core_canvas.create_text(65, 61, text="S", fill=THEME["text"], font=("Segoe UI", 30, "bold"))
-    core_canvas.create_text(65, 86, text="CORE", fill=THEME["cyan"], font=("Segoe UI", 8, "bold"))
+    ring_outer = core_canvas.create_oval(19, 9, 131, 121, outline=THEME["cyan_dim"], width=4)
+    ring_inner = core_canvas.create_oval(
+        31, 21, 119, 109,
+        fill=THEME["core_fill"],
+        outline=THEME["accent"],
+        width=2,
+    )
+    for y in range(30, 104, 8):
+        core_canvas.create_line(40, y, 110, y, fill=THEME["scanline"], width=1)
+    holo_scan = core_canvas.create_line(
+        39, 35, 111, 35,
+        fill=THEME["accent_bright"],
+        width=1,
+    )
+    core_frames = make_holo_frames(82)
+    if core_frames:
+        core_holo_image = core_canvas.create_image(
+            75, 65, image=core_frames[2], anchor="center"
+        )
+        core_canvas.tag_raise(holo_scan)
+        core_holo = None
+    else:
+        core_holo_image = None
+        core_holo = draw_holo_scorpion(core_canvas, cx=75, cy=67, scale=0.78)
+    core_canvas.create_text(
+        75, 112,
+        text="HOLO CORE",
+        fill=THEME["muted"],
+        font=("Segoe UI", 7, "bold"),
+    )
 
     voice_state_label = ctk.CTkLabel(
         core_panel,
         text="STANDBY",
         font=ctk.CTkFont(size=25, weight="bold"),
-        text_color=THEME["cyan"],
+        text_color=THEME["accent_bright"],
     )
     voice_state_label.grid(row=0, column=1, sticky="sw", padx=(2, 16), pady=(28, 2))
     voice_hint_label = ctk.CTkLabel(
@@ -622,7 +1242,7 @@ def run_app() -> None:
         core_panel,
         text="",
         font=ctk.CTkFont(size=30, weight="bold"),
-        text_color=THEME["cyan"],
+        text_color=THEME["accent"],
     )
     countdown_label.grid(row=0, column=2, rowspan=2, padx=24)
 
@@ -631,7 +1251,7 @@ def run_app() -> None:
         corner_radius=22,
         fg_color=THEME["panel"],
         border_width=1,
-        border_color=THEME["border"],
+        border_color=THEME["border_hot"],
         text_color=THEME["text"],
         font=ctk.CTkFont(size=14),
         wrap="word",
@@ -644,7 +1264,7 @@ def run_app() -> None:
         corner_radius=18,
         fg_color=THEME["panel_alt"],
         border_width=1,
-        border_color=THEME["border"],
+        border_color=THEME["border_hot"],
     )
     input_bar.grid(row=2, column=0, sticky="ew", pady=(12, 0))
     input_bar.grid_columnconfigure(0, weight=1)
@@ -654,18 +1274,18 @@ def run_app() -> None:
         height=42,
         corner_radius=12,
         border_width=0,
-        fg_color="#0D141C",
+        fg_color=THEME["input"],
         text_color=THEME["text"],
     )
     entry.grid(row=0, column=0, sticky="ew", padx=(12, 8), pady=11)
 
     # Right system panel
-    right = ctk.CTkFrame(root, width=300, corner_radius=0, fg_color="#0C1118")
+    right = ctk.CTkFrame(root, width=300, corner_radius=0, fg_color=THEME["rail"])
     right.grid(row=0, column=2, sticky="nsew")
     right.grid_propagate(False)
     ctk.CTkLabel(
         right,
-        text="SYSTEM CORE",
+        text="SYSTEM CORE · REDLINE",
         font=ctk.CTkFont(size=15, weight="bold"),
         text_color=THEME["text"],
     ).pack(anchor="w", padx=18, pady=(22, 12))
@@ -737,7 +1357,12 @@ def run_app() -> None:
         font=ctk.CTkFont(size=9, weight="bold"),
         text_color=THEME["muted"],
     ).pack(anchor="w", padx=12, pady=(9, 4))
-    mic_bar = ctk.CTkProgressBar(mic_card, height=8, progress_color=THEME["cyan"], fg_color="#162330")
+    mic_bar = ctk.CTkProgressBar(
+        mic_card,
+        height=8,
+        progress_color=THEME["accent_bright"],
+        fg_color=THEME["cyan_dim"],
+    )
     mic_bar.pack(fill="x", padx=12, pady=(0, 11))
     mic_bar.set(0)
 
@@ -749,28 +1374,55 @@ def run_app() -> None:
 
     append_chat(
         "SCORPION",
-        "MK50 Core online. Wakeword ist standardmäßig aktiv. Build Mode läuft lokal mit Handgesten und Maus-Fallback.",
+        "RED HOLO CORE online. Wakeword ist standardmäßig aktiv. Build Mode läuft lokal mit Handgesten und Maus-Fallback.",
     )
+
+    def agent_progress(role: str, state: str, model: str) -> None:
+        labels = {
+            "fast-team": "FAST TEAM",
+            "coder": "CODER",
+            "tester": "TESTER",
+            "production-validator": "VALIDATOR",
+        }
+        label = labels.get(role, role.upper())
+        if state == "start":
+            root.after(0, lambda: append_chat(
+                "SCORPION · RUFLO",
+                f"{label} arbeitet lokal mit {model} ..."
+            ))
+            root.after(0, lambda: voice_state_label.configure(
+                text=f"{label} · {model}"
+            ))
+        elif state == "done":
+            root.after(0, lambda: append_chat(
+                "SCORPION · RUFLO",
+                f"{label} fertig."
+            ))
+
+    controller.agent_team.progress_callback = agent_progress
 
     def run_bg(fn) -> None:
         threading.Thread(target=fn, daemon=True).start()
 
     def set_voice_visual(state, remaining=None) -> None:
+        value = str(getattr(state, "value", state)).upper()
+        if voice_runtime.get("state") != value:
+            holo_runtime["last_state"] = voice_runtime.get("state", "STANDBY")
+            holo_runtime["state_started"] = time.monotonic()
+        voice_runtime["state"] = value
+
         model = SystemPanelModel.from_voice_state(state, remaining=remaining)
         status_refs["voice"].configure(text=model.voice_label)
         voice_state_label.configure(text=model.voice_label)
-        palette = {
-            VoiceVisualState.STANDBY: (THEME["cyan_dim"], "#0C2631", THEME["cyan"]),
-            VoiceVisualState.ACKNOWLEDGED: (THEME["success"], "#113023", THEME["success"]),
-            VoiceVisualState.WAITING: (THEME["cyan"], "#102B38", THEME["cyan"]),
-            VoiceVisualState.LISTENING: (THEME["cyan"], "#123A46", THEME["cyan"]),
-            VoiceVisualState.THINKING: (THEME["orange"], "#392817", THEME["orange"]),
-            VoiceVisualState.SPEAKING: (THEME["success"], "#14351F", THEME["success"]),
-            VoiceVisualState.ERROR: (THEME["danger"], "#35151A", THEME["danger"]),
-        }
-        outer, fill, accent = palette[model.core_state]
+        outer, fill, accent = RED_HOLO_STATE_PALETTE[model.core_state]
         core_canvas.itemconfigure(ring_outer, outline=outer)
         core_canvas.itemconfigure(ring_inner, outline=accent, fill=fill)
+        holo_runtime["accent"] = accent
+        if core_holo is not None:
+            for item in core_holo["lines"]:
+                core_canvas.itemconfigure(item, fill=accent)
+            for item in core_holo["outlines"]:
+                core_canvas.itemconfigure(item, outline=accent)
         voice_state_label.configure(text_color=accent)
         hint_map = {
             "STANDBY": 'Sag „Scorpion“',
@@ -781,11 +1433,70 @@ def run_app() -> None:
             "SPEAKING": "Antwort läuft …",
             "ERROR": "Voice Core Fehler",
         }
-        value = str(getattr(state, "value", state))
         voice_hint_label.configure(text=hint_map.get(value, ""))
         countdown_label.configure(
             text=f"{int(round(remaining))}s" if model.countdown_visible and remaining is not None else ""
         )
+
+    def animate_holo() -> None:
+        if not root.winfo_exists():
+            return
+
+        holo_runtime["phase"] = (holo_runtime["phase"] + 1) % 18
+        phase = holo_runtime["phase"]
+        accent = holo_runtime["accent"]
+        state = str(voice_runtime.get("state", "STANDBY")).upper()
+        state_time = max(0.0, time.monotonic() - holo_runtime["state_started"])
+
+        # RED HOLO core pulse. Speaking gets a faster, stronger heartbeat.
+        if state == "SPEAKING":
+            pulse = 0.5 + 0.5 * math.sin(state_time * 9.0)
+            pulse_width = 4 + int(round(pulse * 2.0))
+        elif state == "THINKING":
+            pulse = 0.5 + 0.5 * math.sin(state_time * 5.0)
+            pulse_width = 3 + int(round(pulse * 2.0))
+        else:
+            pulse = 0.5 + 0.5 * math.sin(state_time * 2.4)
+            pulse_width = 3 + int(round(pulse))
+
+        core_canvas.itemconfigure(ring_outer, width=pulse_width)
+        core_canvas.itemconfigure(ring_inner, width=3 if pulse > 0.55 else 2)
+
+        scan_y = 30 + ((phase * 5) % 76)
+        core_canvas.coords(holo_scan, 39, scan_y, 111, scan_y)
+        core_canvas.itemconfigure(holo_scan, fill=accent)
+
+        if core_holo_image is not None:
+            animate_holo_asset(
+                core_canvas,
+                core_holo_image,
+                core_frames,
+                state,
+                state_time,
+                x=75,
+                y=65,
+            )
+        elif core_holo is not None:
+            update_holo_scorpion(core_canvas, core_holo, state, state_time)
+
+        if brand_holo_image is not None:
+            animate_holo_asset(
+                brand_canvas,
+                brand_holo_image,
+                brand_frames,
+                state,
+                state_time * 0.86,
+                x=77,
+                y=44,
+            )
+        elif brand_holo is not None:
+            update_holo_scorpion(brand_canvas, brand_holo, state, state_time * 0.86)
+
+        # Small controlled hologram instability only affects the vector fallback.
+        if state == "ERROR" and phase % 3 == 0 and core_holo is not None:
+            core_canvas.move(core_holo["head"], 1 if phase % 2 else -1, 0)
+
+        root.after(55, animate_holo)
 
     def countdown_tick() -> None:
         if voice_runtime["state"] != "WAITING_COMMAND" or voice_runtime["deadline"] is None:
@@ -799,14 +1510,13 @@ def run_app() -> None:
         value = str(getattr(state, "value", state))
 
         def update() -> None:
-            voice_runtime["state"] = value
+            set_voice_visual(value, remaining)
             if value == "WAITING_COMMAND":
                 duration = remaining if remaining is not None else settings.wake_wait_seconds
                 voice_runtime["deadline"] = time.monotonic() + duration
                 countdown_tick()
             else:
                 voice_runtime["deadline"] = None
-                set_voice_visual(value, remaining)
 
         root.after(0, update)
 
@@ -875,7 +1585,7 @@ def run_app() -> None:
             status_refs["build_mode"].configure(text="ACTIVE", text_color=THEME["success"])
             append_chat(
                 "SCORPION · BUILD MODE",
-                "Build Mode aktiv. Pinch greift und verschiebt, zwei Pinches skalieren, Daumen+Mittelfinger dreht. Maus-Fallback ist ebenfalls aktiv.",
+                "Build Mode 3D aktiv. Pinch greift und verschiebt 3D-Objekte. Zwei Hände verändern die Größe, eine Handdrehung rotiert. Über IMPORT 3D kannst du OBJ, GLB, GLTF, STL oder PLY laden.",
             )
         except Exception as exc:
             status_refs["build_mode"].configure(text="ERROR", text_color=THEME["danger"])
@@ -1148,7 +1858,7 @@ def run_app() -> None:
             anchor="w",
             command=command,
             fg_color=THEME["cyan_dim"] if accent else "transparent",
-            hover_color="#172634",
+            hover_color="#2B080D",
             border_width=0 if accent else 1,
             border_color=THEME["border"],
             text_color=THEME["text"],
@@ -1176,7 +1886,7 @@ def run_app() -> None:
         corner_radius=12,
         command=on_send,
         fg_color=THEME["cyan_dim"],
-        hover_color="#15506A",
+        hover_color="#5A0B13",
     ).grid(row=0, column=1, padx=4, pady=11)
     ctk.CTkButton(
         input_bar,
@@ -1185,8 +1895,8 @@ def run_app() -> None:
         height=42,
         corner_radius=12,
         command=on_mic,
-        fg_color="#17212C",
-        hover_color="#26384A",
+        fg_color="#18070A",
+        hover_color="#3A090F",
     ).grid(row=0, column=2, padx=(4, 12), pady=11)
 
     def shutdown() -> None:
@@ -1206,6 +1916,7 @@ def run_app() -> None:
     entry.focus_set()
     refresh_status()
     set_voice_visual("STANDBY")
+    animate_holo()
     if settings.screen_context_enabled:
         controller.screen_context.start(on_screen_context)
     if settings.wake_listener_enabled:

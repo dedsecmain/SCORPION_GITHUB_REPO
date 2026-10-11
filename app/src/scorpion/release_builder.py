@@ -50,6 +50,13 @@ def _update_files(app_root: Path) -> list[str]:
     for path in sorted(source.rglob("*")):
         if path.is_file() and "__pycache__" not in path.parts and path.suffix not in {".pyc", ".pyo"}:
             items.append(_safe_release_path(path.relative_to(app_root).as_posix()))
+    # Include local HUD assets in every signed update so the red hologram
+    # cannot disappear when a previous installation is upgraded.
+    assets = app_root / "assets"
+    if assets.is_dir():
+        for path in sorted(assets.rglob("*")):
+            if path.is_file():
+                items.append(_safe_release_path(path.relative_to(app_root).as_posix()))
     for name in UPDATE_ROOT_FILES:
         path = app_root / name
         if not path.is_file():
@@ -86,8 +93,8 @@ def build_release(app_root: Path | str, output_dir: Path | str, *, version: str)
     app_root = Path(app_root).resolve()
     output_dir = Path(output_dir).resolve()
     version = str(version).strip()
-    if not version.startswith("v") or version != "v74.0.2":
-        raise ValueError("MK74.0.2 release version must be v74.0.2")
+    if not version.startswith("v") or version != "v74.0.3":
+        raise ValueError("MK74.0.3 release version must be v74.0.3")
 
     update_files = _update_files(app_root)
     full_files = _full_files(app_root, update_files)
@@ -123,7 +130,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build deterministic Scorpion MK74 release assets.")
     parser.add_argument("--app-root", default=".")
     parser.add_argument("--out", required=True)
-    parser.add_argument("--version", default="v74.0.2")
+    parser.add_argument("--version", default="v74.0.3")
     args = parser.parse_args(argv)
     result = build_release(args.app_root, args.out, version=args.version)
     print(result.manifest_path)

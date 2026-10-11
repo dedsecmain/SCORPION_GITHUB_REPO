@@ -49,6 +49,19 @@ def _distance(a, b) -> float:
     return math.hypot(float(a[0]) - float(b[0]), float(a[1]) - float(b[1]))
 
 
+def _palm_angle(hand, mirror_x: bool) -> float | None:
+    """Palm axis from index and pinky knuckles, unavailable if landmarks overlap."""
+    if _distance(hand[5], hand[17]) < 0.045:
+        return None
+    angle = math.degrees(
+        math.atan2(
+            float(hand[17][1]) - float(hand[5][1]),
+            float(hand[17][0]) - float(hand[5][0]),
+        )
+    )
+    return -angle if mirror_x else angle
+
+
 class GestureInterpreter:
     """Turns normalized hand landmarks into stable Build Mode events.
 
@@ -94,6 +107,7 @@ class GestureInterpreter:
         self._pinch_states = [False, False]
         self._middle_pinched = False
         self._last_middle_x: float | None = None
+        self._last_palm_angle: float | None = None
         self._two_hand_baseline: float | None = None
         self._missing_frames = 0
         self._smoothed: dict[tuple[int, int], tuple[float, float]] = {}
@@ -157,6 +171,7 @@ class GestureInterpreter:
         self._pinch_states = [False, False]
         self._middle_pinched = False
         self._last_middle_x = None
+        self._last_palm_angle = None
         self._two_hand_baseline = None
         self._smoothed.clear()
 
@@ -203,6 +218,7 @@ class GestureInterpreter:
                     events.append(BuildGestureEvent(BuildGesture.SCALE, value=ratio))
                     self._two_hand_baseline = span
             self._last_middle_x = None
+            self._last_palm_angle = None
             self._middle_pinched = False
             return events
 
@@ -213,6 +229,7 @@ class GestureInterpreter:
         middle_pinch = self._middle_pinch_state(middle_distance)
 
         if middle_pinch and not index_pinch:
+            self._last_palm_angle = None
             self._release_single_pinch(events)
             x, _ = self._smooth_workspace_point(0, 12, hand[12])
             if self._last_middle_x is not None:
@@ -231,13 +248,28 @@ class GestureInterpreter:
 
         if index_pinch:
             x, y = self._smooth_workspace_point(0, 8, hand[8])
+            angle = _palm_angle(hand, self.mirror_x)
             if not self._single_pinched:
                 events.append(BuildGestureEvent(BuildGesture.PINCH_START, x=x, y=y))
                 self._single_pinched = True
             else:
                 events.append(BuildGestureEvent(BuildGesture.PINCH_MOVE, x=x, y=y))
-        elif self._single_pinched:
-            self._release_single_pinch(events)
+                if angle is not None and self._last_palm_angle is not None:
+                    delta = (angle - self._last_palm_angle + 180.0) % 360.0 - 180.0
+                    if abs(delta) >= 4.0:
+                        events.append(BuildGestureEvent(
+                            BuildGesture.ROTATE,
+                            value=self._clamp(
+                                delta,
+                                -self.max_rotation_step,
+                                self.max_rotation_step,
+                            ),
+                        ))
+            self._last_palm_angle = angle
+        else:
+            self._last_palm_angle = None
+            if self._single_pinched:
+                self._release_single_pinch(events)
 
         return events
 
