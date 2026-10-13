@@ -629,7 +629,7 @@ def run_app() -> None:
     ctk.set_appearance_mode("dark")
 
     root = ctk.CTk(fg_color=THEME["bg"])
-    root.title("SCORPION MK74 · RED HOLO CORE")
+    root.title("SCORPION MK90 DEV · RED HOLO CORE")
     root.geometry("1400x840")
     root.minsize(1120, 700)
     root.grid_columnconfigure(0, weight=0, minsize=185)
@@ -1180,7 +1180,7 @@ def run_app() -> None:
     ).pack(anchor="w", padx=16, pady=(20, 0))
     ctk.CTkLabel(
         rail,
-        text="RED HOLO CORE · MK74",
+        text="RED HOLO CORE · MK90 DEV",
         font=ctk.CTkFont(size=10, weight="bold"),
         text_color=THEME["accent"],
     ).pack(anchor="w", padx=16, pady=(2, 8))
@@ -1441,7 +1441,7 @@ def run_app() -> None:
 
     append_chat(
         "SCORPION",
-        "RED HOLO CORE online. Wakeword ist standardmäßig aktiv. Build Mode läuft lokal mit Handgesten und Maus-Fallback.",
+        ("RED HOLO CORE · MK90 DEV online. " + ("Wakeword ist aktiviert. " if settings.wake_listener_enabled else "Wakeword ist für diesen Test deaktiviert. ") + "Build Mode läuft lokal mit Handgesten und Maus-Fallback."),
     )
 
     def agent_progress(role: str, state: str, model: str) -> None:
