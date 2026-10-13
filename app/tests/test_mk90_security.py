@@ -18,6 +18,9 @@ from scorpion.mk90_security import MK90SecurityGate, SecurityUnavailable
     "https://foo.internal/",
     "https://me:password@example.com/",
     "https://example.com:8443/",
+    "https://127.1/",
+    "https://0x7f.1/",
+    "https://example.com/?password=topsecret",
     "https://example.com/\nBad",
 ])
 def test_browser_blocks_nonpublic_targets(url):
