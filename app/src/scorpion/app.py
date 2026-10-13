@@ -45,7 +45,10 @@ from .memory import ConversationMemory
 from .mk90_browser import BrowserAccessDenied, ReadOnlyBrowser, require_public_https_url
 from .mk90_commands import requested_browser_url
 from .mk90_security import MK90SecurityGate
-from .mk90_site_resolver import WebsiteResolver, WebsiteLookupError, requested_website_name
+from .mk90_site_resolver import (
+    WebsiteResolver, WebsiteLookupError, WebsiteSearchDenied,
+    requested_website_name, resolve_with_consent,
+)
 from .proactive_engine import ProactiveEngine
 from .long_term_memory import LongTermMemoryStore
 from .router import AssistantRouter, RouteStatus
@@ -395,30 +398,30 @@ class ScorpionController:
         return requested_browser_url(text)
 
     def _mk90_named_site(self, name: str) -> str:
-        """Search only on request, never trust the first result implicitly."""
+        """Resolve a website name without asking Ollama or auto-trusting search."""
         if not self.settings.mk90_browser_enabled:
             return "MK90-Browser ist noch deaktiviert. Aktiviere SCORPION_MK90_BROWSER_ENABLED=1."
-        match = self.mk90_resolver.known(name)
-        if match is None:
-            # Search queries leave this computer: obtain explicit permission
-            # before sending even the requested website name to the provider.
-            if not self.action_approval_callback(
-                "MK90: Nach der offiziellen Webseite von "
-                + name[:80]
+
+        def approve_lookup(target_name: str) -> bool:
+            return self.action_approval_callback(
+                "MK90: Nach der Webseite von " + target_name[:80]
                 + " mit einer externen Suchmaschine (DuckDuckGo) suchen? "
                 "Es wird nur dieser Webseitenname übertragen."
-            ):
-                return "MK90: Websuche nicht freigegeben."
-            try:
-                match = self.mk90_resolver.search(name)
-            except WebsiteLookupError as exc:
-                return f"MK90: {exc}"
-            origin = "Suchergebnis, nicht als offiziell verifiziert"
-        else:
-            origin = "bekannte Webseitenadresse"
+            )
 
-        # _mk90_preview contains the second, mandatory domain-specific
-        # confirmation plus read-only browsing and security scanning.
+        try:
+            match = resolve_with_consent(name, self.mk90_resolver, approve_lookup)
+        except WebsiteSearchDenied:
+            return "MK90: Websuche nicht freigegeben."
+        except WebsiteLookupError as exc:
+            return f"MK90: {exc}"
+
+        origin = (
+            "bekannte Webseitenadresse"
+            if match.source == "known"
+            else "Suchergebnis, nicht als offiziell verifiziert"
+        )
+        # _mk90_preview requires the second, destination-specific permission.
         return self._mk90_preview(match.url, provenance=origin)
 
     def _mk90_preview(self, url: str, *, provenance: str = "direkte Adresse") -> str:
