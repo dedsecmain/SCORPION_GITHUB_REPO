@@ -45,6 +45,13 @@ class MK90SecurityGate:
         env = {
             "PATH": os.environ.get("PATH", ""),
             "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""),
+            "USERPROFILE": os.environ.get("USERPROFILE", ""),
+            "APPDATA": os.environ.get("APPDATA", ""),
+            "LOCALAPPDATA": os.environ.get("LOCALAPPDATA", ""),
+            "HOMEDRIVE": os.environ.get("HOMEDRIVE", ""),
+            "HOMEPATH": os.environ.get("HOMEPATH", ""),
+            "TEMP": os.environ.get("TEMP", ""),
+            "TMP": os.environ.get("TMP", ""),
             "PYTHONPATH": str(source_root),
             "PYTHONIOENCODING": "utf-8",
             "DO_NOT_TRACK": "1",
