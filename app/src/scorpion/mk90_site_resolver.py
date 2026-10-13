@@ -44,15 +44,28 @@ _PREFIX = re.compile(
     r"(?P<name>.+?)\s*[.!?]?\s*$"
 )
 _TRAILING = re.compile(r"(?iu)\s+(?:vorlesen|vor|bitte|an)$")
+_QUICK_KNOWN = re.compile(
+    r"(?iu)^(?:öffne|oeffne|besuche|geh(?:e)? auf)\s+(?P<name>.+?)\s*[.!?]?\s*$"
+)
 
 
 def requested_website_name(text: str) -> str | None:
     """Parse a natural German website-reading command, never arbitrary prose."""
     raw = " ".join(str(text or "").strip().split())
     match = _PREFIX.fullmatch(raw)
-    if not match:
-        return None
-    name = _TRAILING.sub("", match.group("name").strip()).strip()
+    if match:
+        name = _TRAILING.sub("", match.group("name").strip()).strip()
+    else:
+        # Shorter commands work only for names in the reviewed offline
+        # directory; otherwise app commands such as "öffne den Rechner"
+        # must continue to use the existing Windows action policy.
+        quick = _QUICK_KNOWN.fullmatch(raw)
+        if not quick:
+            return None
+        name = quick.group("name").strip()
+        key = _ALIASES.get(name.casefold(), name.casefold())
+        if key not in _OFFICIAL_SITES:
+            return None
     if (
         not _NAME_PATTERN.fullmatch(name)
         or name.casefold().startswith(("http", "www."))
