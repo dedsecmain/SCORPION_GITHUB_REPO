@@ -6,6 +6,7 @@ Web content is data and must never be interpreted as an agent instruction.
 from __future__ import annotations
 
 import ipaddress
+import re
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -41,6 +42,11 @@ def require_public_https_url(url: str) -> str:
         or "." not in host
     ):
         raise BrowserAccessDenied("Lokale und interne Ziele sind gesperrt.")
+    # Disallow browser-interpreted shorthand addresses such as 127.1 or 0x7f.1.
+    if re.fullmatch(r"[0-9.]+", host) or any(part.startswith("0x") for part in host.split(".")):
+        raise BrowserAccessDenied("Verschleierte IP-Adressen sind gesperrt.")
+    if re.search(r"(?i)(?:^|[?&])(?:password|passwd|token|api[_-]?key|secret)=", parsed.query):
+        raise BrowserAccessDenied("Zugangsdaten in URLs sind gesperrt.")
     try:
         addr = ipaddress.ip_address(host)
     except ValueError:
@@ -83,13 +89,18 @@ class ReadOnlyBrowser:
                     accept_downloads=False,
                     permissions=[],
                     service_workers="block",
+                    java_script_enabled=False,
                 )
                 try:
                     # Block local IP literals, unsafe schemes and internal hostnames,
                     # including during redirects and subresource loading.
+                    allowed_host = urlsplit(url).hostname
+
                     def check_request(route):
                         try:
                             require_public_https_url(route.request.url)
+                            if urlsplit(route.request.url).hostname != allowed_host:
+                                raise BrowserAccessDenied("Weiterleitung auf eine andere Domain gesperrt.")
                         except BrowserAccessDenied:
                             route.abort()
                         else:
@@ -99,6 +110,8 @@ class ReadOnlyBrowser:
                     page = context.new_page()
                     page.goto(url, wait_until="domcontentloaded", timeout=15000)
                     require_public_https_url(page.url)
+                    if urlsplit(page.url).hostname != allowed_host:
+                        raise BrowserAccessDenied("Weiterleitung auf eine andere Domain gesperrt.")
                     title = page.title()[:160]
                     body = page.locator("body").inner_text(timeout=5000)[: self.max_chars]
                     return BrowserPreview(url=page.url, title=title, body=body)
