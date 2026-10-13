@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import importlib.util
 import tempfile
 import time
@@ -9,6 +10,7 @@ from pathlib import Path
 from typing import Callable
 
 from .vad import VADSegmenter, VADUnavailableError
+from .windows_tts import speak_with_windows
 
 
 class LocalSpeechUnavailableError(RuntimeError):
@@ -34,6 +36,7 @@ class LocalAudioService:
         recorder: Callable[[float, int], bytes] | None = None,
         whisper_factory: Callable[[str], object] | None = None,
         tts_factory: Callable[[], object] | None = None,
+        offline_speaker: Callable[[str], None] | None = None,
         natural_tts_factory: Callable[[], object] | None = None,
         natural_voice: str = "de-DE-SeraphinaMultilingualNeural",
         natural_voice_rate: str = "-2%",
@@ -51,6 +54,14 @@ class LocalAudioService:
         self._recorder = recorder or self._record_pcm_default
         self._whisper_factory = whisper_factory or self._default_whisper_factory
         self._tts_factory = tts_factory or self._default_tts_factory
+        self._offline_speaker = offline_speaker or speak_with_windows
+        # Preserve injected mock/fallback behavior in existing tests; actual
+        # Windows installations get the native offline fallback first.
+        self._prefer_windows_sapi = (
+            os.name == "nt" and (tts_factory is None or offline_speaker is not None)
+        )
+        self.last_tts_engine: str | None = None
+        self.last_tts_error: str | None = None
         self.natural_voice_enabled = bool(natural_voice_enabled)
         self._natural_tts_factory = natural_tts_factory or (
             lambda: self._default_natural_tts_factory(
@@ -349,7 +360,15 @@ class LocalAudioService:
                 pass
 
     def speak(self, text: str, *, allow_barge_in: bool = True) -> bool:
+        """Try natural German speech first, then offline SAPI and pyttsx3.
+
+        Record the engine or failure for a visible local voice test.
+        Never report that a failed synthesis successfully spoke.
+        """
         listener = self._barge_in_listener if allow_barge_in else None
+        self.last_tts_engine = None
+        self.last_tts_error = None
+        errors: list[str] = []
         if listener is not None:
             try:
                 listener.begin_assistant_speech(text)
@@ -360,17 +379,36 @@ class LocalAudioService:
                 try:
                     if self._natural_tts is None:
                         self._natural_tts = self._natural_tts_factory()
-                    if self._natural_tts.speak(text[:6000]):
+                    if self._natural_tts.speak(text[:1600]):
+                        self.last_tts_engine = "EDGE NATURAL"
                         return True
-                except Exception:
-                    pass
+                    detail = getattr(self._natural_tts, "last_error", None)
+                    errors.append("Natürliche Stimme: " + str(detail or "nicht verfügbar"))
+                except Exception as exc:
+                    errors.append(f"Natürliche Stimme: {type(exc).__name__}")
+
+            # Windows PowerShell SAPI is local, needs no external speech
+            # service and receives spoken text strictly via standard input.
+            if self._prefer_windows_sapi:
+                try:
+                    from .natural_tts import NaturalVoiceService
+
+                    spoken_text = NaturalVoiceService._speech_text(text)
+                    self._offline_speaker(spoken_text[:1600])
+                    self.last_tts_engine = "WINDOWS OFFLINE"
+                    return True
+                except Exception as exc:
+                    errors.append(f"Windows-Stimme: {type(exc).__name__}")
 
             try:
                 self._fallback_tts = self._tts_factory()
-                self._fallback_tts.say(text[:6000])
+                self._fallback_tts.say(text[:1600])
                 self._fallback_tts.runAndWait()
+                self.last_tts_engine = "PYTTSX3 OFFLINE"
                 return True
-            except Exception:
+            except Exception as exc:
+                errors.append(f"pyttsx3: {type(exc).__name__}")
+                self.last_tts_error = "; ".join(errors)
                 return False
             finally:
                 self._fallback_tts = None
