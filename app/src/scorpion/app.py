@@ -1497,7 +1497,7 @@ def run_app() -> None:
                 core_canvas.itemconfigure(item, outline=accent)
         voice_state_label.configure(text_color=accent)
         hint_map = {
-            "STANDBY": 'Sag „Scorpion“',
+            "STANDBY": ('Sag „Scorpion“' if settings.wake_listener_enabled else "Wakeword aus · LOCAL VOICE zum Sprechen"),
             "ACKNOWLEDGED": "Ich habe dich gehört.",
             "WAITING_COMMAND": "Sag jetzt deinen Befehl oder deine Frage.",
             "LISTENING": "Ich höre zu …",
@@ -1740,7 +1740,11 @@ def run_app() -> None:
                 on_voice_state("ERROR")
                 # A single microphone error must not leave the whole HUD in
                 # a permanently broken state. Details remain in chat.
-                root.after(2500, lambda: on_voice_state("STANDBY"))
+                root.after(
+                    2500,
+                    lambda: on_voice_state("STANDBY")
+                    if voice_runtime.get("state") == "ERROR" else None,
+                )
 
         run_bg(work)
 
