@@ -43,6 +43,7 @@ from .model_manager import ModelManager
 from .model_router import ModelRouter, TaskKind
 from .memory import ConversationMemory
 from .mk90_browser import BrowserAccessDenied, ReadOnlyBrowser, require_public_https_url
+from .mk90_commands import requested_browser_url
 from .mk90_security import MK90SecurityGate
 from .proactive_engine import ProactiveEngine
 from .long_term_memory import LongTermMemoryStore
@@ -389,12 +390,7 @@ class ScorpionController:
 
     @staticmethod
     def _mk90_requested_url(text: str) -> str | None:
-        cleaned = " ".join(str(text).strip().split())
-        lowered = cleaned.casefold()
-        for prefix in ("lies webseite ", "lies die webseite ", "zeige webseite "):
-            if lowered.startswith(prefix):
-                return cleaned[len(prefix):].strip()
-        return None
+        return requested_browser_url(text)
 
     def _mk90_preview(self, url: str) -> str:
         if not self.settings.mk90_browser_enabled:
@@ -1690,7 +1686,9 @@ def run_app() -> None:
         run_bg(work)
 
     def on_send() -> None:
-        ask(entry.get())
+        # Typed replies (especially whole web pages) should never auto-start
+        # online Edge TTS or hold the Voice Core in SPEAKING state.
+        ask(entry.get(), speak=False)
 
     def on_mode_change(value: str) -> None:
         controller.set_mode(value)
