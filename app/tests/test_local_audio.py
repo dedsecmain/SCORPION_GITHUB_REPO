@@ -221,3 +221,40 @@ def test_voice_core_reports_missing_microphone_without_crashing(monkeypatch):
     assert ok is False
     assert "Mikrofon" in status
     assert "Windows" in status
+
+
+
+def test_metadata_errors_pyav_19_failure_has_actionable_voice_core_fix(tmp_path):
+    class IncompatibleWhisper:
+        def transcribe(self, _path, **kwargs):
+            raise TypeError("open() got an unexpected keyword argument 'metadata_errors'")
+
+    audio = LocalAudioService(
+        "base", whisper_factory=lambda _model: IncompatibleWhisper(),
+        temp_dir=tmp_path,
+    )
+    source = tmp_path / "voice.wav"
+    source.write_bytes(b"example audio")
+    with pytest.raises(LocalSpeechUnavailableError) as captured:
+        audio.transcribe_command(source)
+
+    message = str(captured.value)
+    assert "Voice Core" in message
+    assert "PyAV" in message
+    assert "av>=11,<19" in message
+    assert "Mikrofonaufnahme" not in message
+
+
+def test_other_transcription_errors_keep_existing_diagnostics(tmp_path):
+    class BrokenWhisper:
+        def transcribe(self, _path, **kwargs):
+            raise ValueError("corrupted audio")
+
+    audio = LocalAudioService(
+        "base", whisper_factory=lambda _model: BrokenWhisper(),
+        temp_dir=tmp_path,
+    )
+    source = tmp_path / "voice.wav"
+    source.write_bytes(b"example audio")
+    with pytest.raises(LocalSpeechUnavailableError, match="corrupted audio"):
+        audio.transcribe_command(source)
