@@ -79,10 +79,13 @@ def _unwrap_result_link(link: str) -> str | None:
     link = html.unescape(link.strip())
     if link.startswith("//"):
         link = "https:" + link
-    parsed = urlsplit(link)
-    if parsed.hostname in {"duckduckgo.com", "www.duckduckgo.com"} and parsed.path.startswith("/l/"):
-        embedded = parse_qs(parsed.query).get("uddg", [])
-        link = embedded[0] if embedded else ""
+    try:
+        parsed = urlsplit(link)
+        if parsed.hostname in {"duckduckgo.com", "www.duckduckgo.com"} and parsed.path.startswith("/l/"):
+            embedded = parse_qs(parsed.query).get("uddg", [])
+            link = embedded[0] if embedded else ""
+    except ValueError:
+        return None
     try:
         require_public_https_url(link)
     except BrowserAccessDenied:
@@ -173,3 +176,17 @@ class WebsiteResolver:
         if not results:
             raise WebsiteLookupError("Keine passende Webseite gefunden. Bitte gib die URL an.")
         return results[0]
+
+
+class WebsiteSearchDenied(WebsiteLookupError):
+    """The user did not approve transmitting this name to a search service."""
+
+
+def resolve_with_consent(name: str, resolver: WebsiteResolver, approve_search) -> WebsiteMatch:
+    """Return a site without unnecessary queries; unknown names require consent."""
+    known = resolver.known(name)
+    if known is not None:
+        return known
+    if not approve_search(name):
+        raise WebsiteSearchDenied("Websuche nicht freigegeben.")
+    return resolver.search(name)
