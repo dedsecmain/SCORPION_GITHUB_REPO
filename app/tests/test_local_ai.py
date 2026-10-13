@@ -268,3 +268,29 @@ def test_respond_agent_uses_minimal_generate_payload():
     assert payload["options"]["num_ctx"] == 1536
     assert payload["options"]["num_predict"] == 120
     assert "messages" not in payload
+
+
+
+def test_mk90_chat_timeout_does_not_repeat_expensive_generation():
+    class SlowTransport:
+        def __init__(self):
+            self.chats = 0
+
+        def __call__(self, method, url, payload=None, timeout=5.0):
+            if url.endswith("/api/tags"):
+                return {"models": [{"name": "qwen3.5:4b"}]}
+            self.chats += 1
+            raise TimeoutError("timed out")
+
+    transport = SlowTransport()
+    ai = OllamaLocalAI(
+        "http://127.0.0.1:11434",
+        "qwen3.5:4b",
+        transport=transport,
+        retry_attempts=2,
+        retry_delay=0,
+    )
+
+    with pytest.raises(OllamaOfflineError, match="nicht rechtzeitig erzeugt"):
+        ai.respond("Hallo")
+    assert transport.chats == 1
