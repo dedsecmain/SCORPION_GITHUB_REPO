@@ -15,6 +15,11 @@ class BrowserAccessDenied(ValueError):
     pass
 
 
+class BrowserLoadError(RuntimeError):
+    """Sanitized browser navigation error suitable for the Scorpion UI."""
+
+
+
 def require_public_https_url(url: str) -> str:
     url = str(url).strip()
     if len(url) > 2048 or any(ord(char) < 32 for char in url):
@@ -108,7 +113,23 @@ class ReadOnlyBrowser:
 
                     context.route("**/*", check_request)
                     page = context.new_page()
-                    page.goto(url, wait_until="domcontentloaded", timeout=15000)
+                    try:
+                        page.goto(url, wait_until="domcontentloaded", timeout=15000)
+                    except Exception as exc:
+                        # Playwright's raw navigation errors can include verbose
+                        # internal call logs and whole URLs. Show a concise reason.
+                        detail = str(exc)
+                        if "ERR_NAME_NOT_RESOLVED" in detail:
+                            raise BrowserLoadError(
+                                "Domain nicht gefunden. Prüfe die vollständige HTTPS-Adresse."
+                            ) from None
+                        if "Timeout" in detail or "timed out" in detail.lower():
+                            raise BrowserLoadError(
+                                "Webseite antwortet nicht rechtzeitig."
+                            ) from None
+                        raise BrowserLoadError(
+                            "Webseite konnte nicht geladen werden."
+                        ) from None
                     require_public_https_url(page.url)
                     if urlsplit(page.url).hostname != allowed_host:
                         raise BrowserAccessDenied("Weiterleitung auf eine andere Domain gesperrt.")
