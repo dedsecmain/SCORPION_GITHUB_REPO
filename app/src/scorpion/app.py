@@ -45,6 +45,7 @@ from .memory import ConversationMemory
 from .mk90_browser import BrowserAccessDenied, ReadOnlyBrowser, require_public_https_url
 from .mk90_commands import requested_browser_url
 from .mk90_security import MK90SecurityGate
+from .mk90_site_resolver import WebsiteResolver, WebsiteLookupError, requested_website_name
 from .proactive_engine import ProactiveEngine
 from .long_term_memory import LongTermMemoryStore
 from .router import AssistantRouter, RouteStatus
@@ -123,6 +124,7 @@ class ScorpionController:
         self.app_trust = AppTrustRegistry(settings.app_trust_path)
         self.audit = AuditLog()
         self.mk90_browser = ReadOnlyBrowser()
+        self.mk90_resolver = WebsiteResolver()
         self.mk90_security = MK90SecurityGate()
         self.handoff = handoff or ChatGPTHandoff()
         self.router = AssistantRouter(self.local_ai)
@@ -392,7 +394,34 @@ class ScorpionController:
     def _mk90_requested_url(text: str) -> str | None:
         return requested_browser_url(text)
 
-    def _mk90_preview(self, url: str) -> str:
+    def _mk90_named_site(self, name: str) -> str:
+        """Search only on request, never trust the first result implicitly."""
+        if not self.settings.mk90_browser_enabled:
+            return "MK90-Browser ist noch deaktiviert. Aktiviere SCORPION_MK90_BROWSER_ENABLED=1."
+        match = self.mk90_resolver.known(name)
+        if match is None:
+            # Search queries leave this computer: obtain explicit permission
+            # before sending even the requested website name to the provider.
+            if not self.action_approval_callback(
+                "MK90: Nach der offiziellen Webseite von "
+                + name[:80]
+                + " mit einer externen Suchmaschine (DuckDuckGo) suchen? "
+                "Es wird nur dieser Webseitenname übertragen."
+            ):
+                return "MK90: Websuche nicht freigegeben."
+            try:
+                match = self.mk90_resolver.search(name)
+            except WebsiteLookupError as exc:
+                return f"MK90: {exc}"
+            origin = "Suchergebnis, nicht als offiziell verifiziert"
+        else:
+            origin = "bekannte Webseitenadresse"
+
+        # _mk90_preview contains the second, mandatory domain-specific
+        # confirmation plus read-only browsing and security scanning.
+        return self._mk90_preview(match.url, provenance=origin)
+
+    def _mk90_preview(self, url: str, *, provenance: str = "direkte Adresse") -> str:
         if not self.settings.mk90_browser_enabled:
             return "MK90-Browser ist noch deaktiviert. Aktiviere SCORPION_MK90_BROWSER_ENABLED=1."
         try:
@@ -427,7 +456,8 @@ class ScorpionController:
         _ok, message = execute_preflighted_action(
             preflight,
             confirm=lambda pf: self.action_approval_callback(
-                f"MK90: öffentliche Website {pf.target} einmalig nur lesend öffnen?"
+                f"MK90: {provenance}. Öffentliche Domain {pf.target} "
+                "einmalig nur lesend öffnen? Bitte Domain prüfen."
             ),
             executor=_execute,
             audit_log=self.audit,
@@ -447,6 +477,9 @@ class ScorpionController:
         mk90_url = self._mk90_requested_url(text)
         if mk90_url is not None:
             return self._mk90_preview(mk90_url)
+        mk90_name = requested_website_name(text)
+        if mk90_name is not None:
+            return self._mk90_named_site(mk90_name)
         command = parse_command(text)
         if command.kind is CommandKind.RUFLO_STATUS:
             status = self.ruflo.status()
