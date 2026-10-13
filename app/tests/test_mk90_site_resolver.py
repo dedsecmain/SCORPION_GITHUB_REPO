@@ -22,6 +22,8 @@ from scorpion.mk90_site_resolver import (
     ("lies die Website vom Zoo Zürich", "Zoo Zürich"),
     ("besuche die Webseite von Wikipedia", "Wikipedia"),
     ("schau dir die Seite von example AG an", "example AG"),
+    ("öffne Netflix", "Netflix"),
+    ("geh auf Spotify", "Spotify"),
 ])
 def test_natural_name_commands(phrase, name):
     assert requested_website_name(phrase) == name
@@ -30,6 +32,7 @@ def test_natural_name_commands(phrase, name):
 @pytest.mark.parametrize("phrase", [
     "was ist netflix",
     "öffne den rechner",
+    "öffne mein Notizbuch",
     "ich finde netflix gut",
     "lies webseite https://example.com",
     "erkläre die Webseite",
