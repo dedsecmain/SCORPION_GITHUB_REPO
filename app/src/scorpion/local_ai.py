@@ -80,7 +80,17 @@ class OllamaLocalAI:
                 return self.transport(method, url, payload, timeout)
             except (OllamaOfflineError, OSError, error.URLError, TimeoutError) as exc:
                 last_error = exc
-                if attempt >= attempts:
+                # Re-running a generation after a socket read timeout can
+                # create several simultaneous expensive local model jobs.
+                # Keep retries for short transport resets, but not timeouts.
+                if (
+                    attempt >= attempts
+                    or (method == "POST" and (
+                        isinstance(exc, TimeoutError)
+                        or "timed out" in str(exc).casefold()
+                        or "timeout" in str(exc).casefold()
+                    ))
+                ):
                     break
                 delay = self.retry_delay * (2 ** attempt)
                 if delay > 0:
@@ -227,6 +237,14 @@ class OllamaLocalAI:
                 retry_attempts=retry_attempts,
             )
         except OllamaOfflineError as exc:
+            detail = str(exc)
+            if "timed out" in detail.casefold() or "timeout" in detail.casefold():
+                raise OllamaOfflineError(
+                    "Das lokale KI-Modell hat die Antwort nicht rechtzeitig erzeugt. "
+                    "Das Statusfeld 'OLLAMA READY' bestätigt nur die Erreichbarkeit "
+                    "des Modellservers. Prüfe die RAM-Auslastung und teste "
+                    "das Modell mit 'ollama run' direkt."
+                ) from exc
             raise OllamaOfflineError(
                 f"Ollama-Verbindung ist während der Anfrage abgebrochen: {exc}"
             ) from exc
