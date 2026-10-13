@@ -95,6 +95,8 @@ class Settings:
     ruflo_command: str = "ruflo"
     ruflo_max_agents: int = 4
     github_repo: str = OFFICIAL_GITHUB_REPO
+    mk90_browser_enabled: bool = False
+    mk90_scanners_enabled: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -151,4 +153,6 @@ class Settings:
             ruflo_command=os.getenv("SCORPION_RUFLO_COMMAND", "ruflo").strip() or "ruflo",
             ruflo_max_agents=max(4, min(16, int(os.getenv("SCORPION_RUFLO_MAX_AGENTS", "4")))),
             github_repo=_official_update_repo(os.getenv("SCORPION_GITHUB_REPO")),
+            mk90_browser_enabled=_env_bool("SCORPION_MK90_BROWSER_ENABLED", False),
+            mk90_scanners_enabled=_env_bool("SCORPION_MK90_SCANNERS_ENABLED", False),
         )
