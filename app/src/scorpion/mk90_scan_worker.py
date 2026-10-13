@@ -6,8 +6,19 @@ Never print page content, passwords or prompt text to diagnostic output.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
+
+# Enforce local-only telemetry settings even when a worker is run directly.
+# Configure this before importing Guardrails or LlamaFirewall.
+os.environ.update({
+    "DO_NOT_TRACK": "1",
+    "OTEL_SDK_DISABLED": "true",
+    "OTEL_TRACES_EXPORTER": "none",
+    "OTEL_METRICS_EXPORTER": "none",
+    "OTEL_LOGS_EXPORTER": "none",
+})
 
 
 _SECRET_VALUE = re.compile(
