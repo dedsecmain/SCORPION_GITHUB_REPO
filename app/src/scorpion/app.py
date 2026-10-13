@@ -1733,6 +1733,8 @@ def run_app() -> None:
         if command:
             root.after(0, lambda: ask(command))
 
+    wake_diagnostics_seen: set[str] = set()
+
     def on_wake_status(text: str) -> None:
         if text.startswith("RECOVERING"):
             root.after(
@@ -1742,6 +1744,15 @@ def run_app() -> None:
                     text_color=THEME["orange"],
                 ),
             )
+            # In previous builds the wake error was silently collapsed to
+            # "WAKE RECOVERING", making microphone failures impossible to
+            # diagnose. Report up to three distinct errors in the chat.
+            detail = text.partition(" · ")[2].strip()
+            if detail and detail not in wake_diagnostics_seen and len(wake_diagnostics_seen) < 3:
+                wake_diagnostics_seen.add(detail)
+                root.after(0, lambda message=detail: append_chat(
+                    "SYSTEM", "Wakeword-Diagnose: " + message[:240]
+                ))
         elif text == "OFF":
             root.after(0, lambda: status_refs["voice"].configure(text="WAKE OFF"))
 
