@@ -31,6 +31,7 @@ class ActionPolicy:
         "rename_file",
         "change_setting",
         "edit_persistent_data",
+        "browser_preview",
     }
     CRITICAL = {
         "delete_file",
@@ -42,6 +43,11 @@ class ActionPolicy:
         "purchase",
         "change_security_settings",
         "run_elevated",
+        "browser_login",
+        "browser_submit",
+        "browser_upload",
+        "browser_purchase",
+        "browser_credentials",
     }
 
     def classify(self, action: str, target: str | None = None) -> ActionRisk:
