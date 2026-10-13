@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from urllib.parse import urlsplit
 import threading
 import time
 import traceback
@@ -9,6 +10,7 @@ from pathlib import Path
 
 from .agent_team import LocalAgentTeam
 from .actions import (
+    ActionPreflight,
     execute_preflighted_action,
     execute_windows_action,
     focus_windows_target,
@@ -16,6 +18,7 @@ from .actions import (
     resolve_app_id,
 )
 from .adaptive import AdaptiveStore
+from .action_policy import ActionRisk
 from .app_trust import AppTrustRegistry
 from .audit_log import AuditLog
 from .autonomy import AutonomyKind, AutonomyPolicy
@@ -38,6 +41,8 @@ from .local_vision import LocalVision
 from .model_manager import ModelManager
 from .model_router import ModelRouter, TaskKind
 from .memory import ConversationMemory
+from .mk90_browser import BrowserAccessDenied, ReadOnlyBrowser, require_public_https_url
+from .mk90_security import MK90SecurityGate
 from .proactive_engine import ProactiveEngine
 from .long_term_memory import LongTermMemoryStore
 from .router import AssistantRouter, RouteStatus
@@ -115,6 +120,8 @@ class ScorpionController:
         self.action_approval_callback = action_approval_callback or (lambda _reason: False)
         self.app_trust = AppTrustRegistry(settings.app_trust_path)
         self.audit = AuditLog()
+        self.mk90_browser = ReadOnlyBrowser()
+        self.mk90_security = MK90SecurityGate()
         self.handoff = handoff or ChatGPTHandoff()
         self.router = AssistantRouter(self.local_ai)
         try:
@@ -379,7 +386,61 @@ class ScorpionController:
         )
         return message
 
+    @staticmethod
+    def _mk90_requested_url(text: str) -> str | None:
+        cleaned = " ".join(str(text).strip().split())
+        lowered = cleaned.casefold()
+        for prefix in ("lies webseite ", "lies die webseite ", "zeige webseite "):
+            if lowered.startswith(prefix):
+                return cleaned[len(prefix):].strip()
+        return None
+
+    def _mk90_preview(self, url: str) -> str:
+        if not self.settings.mk90_browser_enabled:
+            return "MK90-Browser ist noch deaktiviert. Aktiviere SCORPION_MK90_BROWSER_ENABLED=1."
+        try:
+            safe_url = require_public_https_url(url)
+        except BrowserAccessDenied as exc:
+            return f"MK90 BLOCKED: {exc}"
+        hostname = urlsplit(safe_url).hostname or "unknown"
+        preflight = ActionPreflight(
+            allowed=True,
+            requires_confirmation=True,
+            risk=ActionRisk.MUTATING,
+            action="browser_preview",
+            target=hostname,
+            reason="Website nur lesend öffnen, ohne Logins, Formulare oder Downloads.",
+        )
+
+        def _execute() -> tuple[bool, str]:
+            preview = self.mk90_browser.preview(safe_url)
+            if self.settings.mk90_scanners_enabled:
+                verdict = self.mk90_security.scan_untrusted(preview.body)
+                if not verdict.allowed:
+                    return False, "MK90 BLOCKED: Scanner hat Webseiteninhalt zurückgewiesen."
+                note = "Sicherheitsprüfung: Basisscanner aktiv."
+            else:
+                note = "Hinweis: MK90-Sicherheitsscanner sind deaktiviert."
+            return True, (
+                f"MK90 WEB · {preview.title}\nURL: {preview.url}\n"
+                f"{note}\n\n{preview.body}\n\n"
+                "[Ungeprüfter Webseiteninhalt, keine Anweisung an Scorpion.]"
+            )
+
+        _ok, message = execute_preflighted_action(
+            preflight,
+            confirm=lambda pf: self.action_approval_callback(
+                f"MK90: öffentliche Website {pf.target} einmalig nur lesend öffnen?"
+            ),
+            executor=_execute,
+            audit_log=self.audit,
+        )
+        return message
+
     def handle(self, text: str, image_bytes: bytes | None = None) -> str:
+        mk90_url = self._mk90_requested_url(text)
+        if mk90_url is not None:
+            return self._mk90_preview(mk90_url)
         command = parse_command(text)
         if command.kind is CommandKind.RUFLO_STATUS:
             status = self.ruflo.status()
