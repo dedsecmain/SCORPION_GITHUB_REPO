@@ -37,6 +37,7 @@ class NaturalVoiceService:
         self._player = player or self._windows_mci_play
         self.temp_dir = Path(temp_dir) if temp_dir is not None else Path(tempfile.gettempdir())
         self._stop_event = threading.Event()
+        self.last_error: str | None = None
         self._active_alias: str | None = None
         self._alias_lock = threading.Lock()
 
@@ -132,6 +133,7 @@ class NaturalVoiceService:
             pass
 
     def speak(self, text: str) -> bool:
+        self.last_error = None
         spoken = self._speech_text(text)
         if not spoken:
             return False
@@ -154,7 +156,10 @@ class NaturalVoiceService:
                 return False
             self._player(output)
             return not self._stop_event.is_set()
-        except Exception:
+        except Exception as exc:
+            # Do not swallow TTS failures without a local diagnostic. Avoid
+            # including the spoken text or any tokens in the error string.
+            self.last_error = type(exc).__name__
             return False
         finally:
             try:
