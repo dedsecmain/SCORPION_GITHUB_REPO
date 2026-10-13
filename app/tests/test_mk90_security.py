@@ -72,6 +72,13 @@ def test_security_bridge_requires_both_scanners(tmp_path):
     assert verdict.allowed
     assert len(invocations) == 2
     assert all(call[1]["input"] == '{"text": "public text"}' for call in invocations)
+    for _, kwargs in invocations:
+        env = kwargs["env"]
+        assert env["DO_NOT_TRACK"] == "1"
+        assert env["OTEL_SDK_DISABLED"] == "true"
+        assert env["OTEL_TRACES_EXPORTER"] == "none"
+        assert env["OTEL_METRICS_EXPORTER"] == "none"
+        assert env["OTEL_LOGS_EXPORTER"] == "none"
 
 
 def test_security_bridge_blocks_on_first_negative_result(tmp_path):
