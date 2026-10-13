@@ -37,13 +37,13 @@ _NAME_PATTERN = re.compile(r"(?iu)^[\wÀ-ÿ][\wÀ-ÿ .&+\-']{0,79}$")
 _PREFIX = re.compile(
     r"(?iu)^(?:bitte\s+)?"
     r"(?:lies(?:\s+mir)?|zeige(?:\s+mir)?|öffne|oeffne|besuche|"
-    r"schau(?:\s+dir)?\s+an)\s+"
+    r"schau(?:\s+dir)?)\s+"
     r"(?:die\s+|das\s+)?"
     r"(?:webseite|website|homepage|internetseite|seite)\s+"
     r"(?:von\s+|vom\s+|für\s+|fuer\s+)?"
     r"(?P<name>.+?)\s*[.!?]?\s*$"
 )
-_TRAILING = re.compile(r"(?iu)\s+(?:vorlesen|vor|bitte)$")
+_TRAILING = re.compile(r"(?iu)\s+(?:vorlesen|vor|bitte|an)$")
 
 
 def requested_website_name(text: str) -> str | None:
