@@ -435,6 +435,15 @@ class ScorpionController:
         return message
 
     def handle(self, text: str, image_bytes: bytes | None = None) -> str:
+        if str(text).strip().casefold() in {
+            "voice status", "voice check", "voice core status",
+            "mikrofon status", "mikrofonstatus", "sprachdiagnose",
+        }:
+            checker = getattr(self.audio, "microphone_status", None)
+            if callable(checker):
+                _ok, detail = checker()
+                return detail
+            return "VOICE CORE: Mikrofon-Selbsttest in diesem Audiomodul nicht verfügbar."
         mk90_url = self._mk90_requested_url(text)
         if mk90_url is not None:
             return self._mk90_preview(mk90_url)
@@ -1678,10 +1687,21 @@ def run_app() -> None:
                 answer = f"Fehler: {exc}"
             root.after(0, lambda: append_chat("SCORPION", answer))
             root.after(0, refresh_intelligence)
-            if speak and answer and not answer.startswith("Fehler:"):
-                on_voice_state("SPEAKING")
-                controller.audio.speak(answer)
-            on_voice_state("STANDBY")
+            try:
+                if speak and answer and not answer.startswith("Fehler:"):
+                    on_voice_state("SPEAKING")
+                    spoken = controller.audio.speak(answer)
+                    if spoken is False:
+                        root.after(0, lambda: append_chat(
+                            "SYSTEM", "VOICE CORE: Sprachausgabe nicht verfügbar. "
+                            "Prüfe Netzwerk für Edge-TTS oder lokale Windows-Stimmen."
+                        ))
+            except Exception as exc:
+                root.after(0, lambda message=str(exc): append_chat(
+                    "SYSTEM", "VOICE CORE: Wiedergabe fehlgeschlagen: " + message[:200]
+                ))
+            finally:
+                on_voice_state("STANDBY")
 
         run_bg(work)
 
@@ -1700,6 +1720,13 @@ def run_app() -> None:
     def on_mic() -> None:
         def work() -> None:
             try:
+                checker = getattr(controller.audio, "microphone_status", None)
+                if callable(checker):
+                    microphone_ok, detail = checker()
+                    if not microphone_ok:
+                        root.after(0, lambda message=detail: append_chat("SYSTEM", message))
+                        on_voice_state("STANDBY")
+                        return
                 on_voice_state("LISTENING")
                 command_text, _heard = controller.listen_once()
                 if command_text is None:
@@ -1707,8 +1734,13 @@ def run_app() -> None:
                     return
                 root.after(0, lambda: ask(command_text))
             except Exception as exc:
-                root.after(0, lambda: append_chat("SYSTEM", f"Lokale Sprache nicht verfügbar: {exc}"))
+                root.after(0, lambda message=str(exc): append_chat(
+                    "SYSTEM", "VOICE CORE: Mikrofon oder Transkription fehlgeschlagen: " + message[:240]
+                ))
                 on_voice_state("ERROR")
+                # A single microphone error must not leave the whole HUD in
+                # a permanently broken state. Details remain in chat.
+                root.after(2500, lambda: on_voice_state("STANDBY"))
 
         run_bg(work)
 
