@@ -25,4 +25,4 @@ jobs:
         shell: pwsh
         env:
           PYTHONPATH: app/src
-        run: python -m pytest -q app/tests/test_mk90_security.py app/tests/test_action_policy.py app/tests/test_confirmation_flow.py app/tests/test_mk90_commands.py app/tests/test_local_audio.py
+        run: python -m pytest -q app/tests/test_mk90_security.py app/tests/test_action_policy.py app/tests/test_confirmation_flow.py app/tests/test_mk90_commands.py app/tests/test_local_audio.py app/tests/test_local_ai.py
