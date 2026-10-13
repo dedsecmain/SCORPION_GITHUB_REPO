@@ -15,7 +15,7 @@ from collections.abc import Callable
 # text itself is delivered separately over UTF-8 stdin.
 _SAPI_SCRIPT = r"""
 $ErrorActionPreference = 'Stop'
-[Console]::InputEncoding = New-Object System.Text.UTF8Encoding($false)
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
 Add-Type -AssemblyName System.Speech
 $speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer
 try {
