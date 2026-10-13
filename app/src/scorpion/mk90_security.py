@@ -55,6 +55,13 @@ class MK90SecurityGate:
             "PYTHONPATH": str(source_root),
             "PYTHONIOENCODING": "utf-8",
             "DO_NOT_TRACK": "1",
+            # Keep Guardrails/OpenTelemetry diagnostics on this PC.
+            # These must be set in the worker subprocess, not just an
+            # interactive PowerShell window.
+            "OTEL_SDK_DISABLED": "true",
+            "OTEL_TRACES_EXPORTER": "none",
+            "OTEL_METRICS_EXPORTER": "none",
+            "OTEL_LOGS_EXPORTER": "none",
         }
         try:
             proc = self._runner(
