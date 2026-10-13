@@ -193,6 +193,20 @@ class LocalAudioService:
                 if getattr(segment, "text", "").strip()
             )
         except Exception as exc:
+            # Faster-Whisper 1.2.1 sends 'metadata_errors' to av.open(),
+            # but PyAV 19 removed that argument. A helpful diagnostic avoids
+            # mistaking this library conflict for a broken microphone.
+            if (
+                isinstance(exc, TypeError)
+                and "metadata_errors" in str(exc)
+                and "unexpected keyword argument" in str(exc)
+            ):
+                raise LocalSpeechUnavailableError(
+                    "Voice Core: Faster-Whisper und PyAV sind inkompatibel. "
+                    "Schließe Scorpion MK90 und führe im Projekt-Python aus: "
+                    'python -m pip install "av>=11,<19". '
+                    "Danach Scorpion neu starten."
+                ) from exc
             raise LocalSpeechUnavailableError(f"Lokale Transkription fehlgeschlagen: {exc}") from exc
         return text.strip()
 
