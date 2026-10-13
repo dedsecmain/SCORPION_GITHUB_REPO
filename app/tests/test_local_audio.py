@@ -258,3 +258,64 @@ def test_other_transcription_errors_keep_existing_diagnostics(tmp_path):
     source.write_bytes(b"example audio")
     with pytest.raises(LocalSpeechUnavailableError, match="corrupted audio"):
         audio.transcribe_command(source)
+
+
+
+def test_voice_output_recovers_with_offline_windows_speaker():
+    spoken = []
+
+    class NoNetwork:
+        last_error = "ConnectionError"
+
+        def speak(self, _text):
+            return False
+
+    class ShouldNotUsePyttsx:
+        def __init__(self):
+            raise AssertionError("SAPI succeeded so pyttsx3 must not run")
+
+    audio = LocalAudioService(
+        natural_tts_factory=lambda: NoNetwork(),
+        offline_speaker=lambda text: spoken.append(text),
+        tts_factory=ShouldNotUsePyttsx,
+    )
+    audio._prefer_windows_sapi = True
+    assert audio.speak("Hallo, ich bin Scorpion.") is True
+    assert spoken == ["Hallo, ich bin Scorpion."]
+    assert audio.last_tts_engine == "WINDOWS OFFLINE"
+    assert audio.last_tts_error is None
+
+
+def test_voice_output_reports_failure_when_all_engines_fail():
+    def bad_sapi(_text):
+        raise RuntimeError("Output device unavailable")
+
+    def bad_pyttsx():
+        raise RuntimeError("SAPI not registered")
+
+    audio = LocalAudioService(
+        natural_voice_enabled=False,
+        offline_speaker=bad_sapi,
+        tts_factory=bad_pyttsx,
+    )
+    audio._prefer_windows_sapi = True
+    assert audio.speak("Hallo") is False
+    assert audio.last_tts_engine is None
+    assert "Windows-Stimme" in audio.last_tts_error
+    assert "pyttsx3" in audio.last_tts_error
+
+
+def test_voice_output_exposes_engine_selected_for_offline_fallback():
+    class Fallback:
+        def say(self, text):
+            assert text == "Hallo"
+
+        def runAndWait(self):
+            pass
+
+    audio = LocalAudioService(
+        natural_voice_enabled=False,
+        tts_factory=lambda: Fallback(),
+    )
+    assert audio.speak("Hallo") is True
+    assert audio.last_tts_engine == "PYTTSX3 OFFLINE"
