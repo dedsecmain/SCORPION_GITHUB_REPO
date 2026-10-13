@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 from urllib.parse import urlsplit
 import threading
 import time
@@ -612,14 +613,19 @@ def run_app() -> None:
 
     settings = Settings.from_env()
     install_root = Path(__file__).resolve().parents[2]
-    try:
-        autostart_status = ensure_windows_autostart(
-            install_root,
-            enabled=settings.autostart_enabled,
-        )
-    except Exception as exc:
+    if os.getenv("SCORPION_MK90_DEV") == "1":
+        # The experimental branch must not overwrite or remove the production
+        # Scorpion Windows startup shortcut during a local smoke test.
         autostart_status = None
-        print(f"Autostart konnte nicht aktualisiert werden: {exc}")
+    else:
+        try:
+            autostart_status = ensure_windows_autostart(
+                install_root,
+                enabled=settings.autostart_enabled,
+            )
+        except Exception as exc:
+            autostart_status = None
+            print(f"Autostart konnte nicht aktualisiert werden: {exc}")
     ctk.set_appearance_mode("dark")
 
     root = ctk.CTk(fg_color=THEME["bg"])
