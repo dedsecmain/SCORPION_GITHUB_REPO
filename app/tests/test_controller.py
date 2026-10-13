@@ -225,3 +225,35 @@ def test_screen_command_uses_dedicated_local_vision_when_available(tmp_path):
     assert answer == "Lokale Bildschirmansicht"
     assert local.calls[-1][2] is not None
     assert local.calls[-1][3] == "gemma3:4b"
+
+
+def test_mk90_natural_netflix_request_skips_ollama(tmp_path):
+    from dataclasses import replace
+    from scorpion.mk90_browser import BrowserPreview
+    from scorpion.mk90_site_resolver import WebsiteResolver
+
+    controller, local, cloud, _ = make_controller(tmp_path)
+    controller.settings = replace(controller.settings, mk90_browser_enabled=True)
+
+    class Browser:
+        visited = []
+
+        def preview(self, url):
+            self.visited.append(url)
+            return BrowserPreview(url, "Netflix", "Example homepage")
+
+    controller.mk90_resolver = WebsiteResolver(
+        search=lambda name: (_ for _ in ()).throw(AssertionError("Unexpected search"))
+    )
+    controller.mk90_browser = Browser()
+    approvals = []
+    controller.action_approval_callback = lambda reason: approvals.append(reason) or True
+
+    answer = controller.handle("lies die Webseite von Netflix")
+
+    assert "MK90 WEB" in answer
+    assert controller.mk90_browser.visited == ["https://www.netflix.com/"]
+    assert local.calls == []
+    assert cloud.calls == []
+    assert len(approvals) == 1
+    assert "www.netflix.com" in approvals[0]
