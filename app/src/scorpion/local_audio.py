@@ -66,6 +66,33 @@ class LocalAudioService:
         self._clock = clock or time.monotonic
 
     @staticmethod
+    def microphone_status() -> tuple[bool, str]:
+        """Non-recording check of the selected Windows input device.
+
+        This is not a speech-recognition test. It reports missing devices,
+        permission problems and unsupported recording settings without
+        waking Whisper or requesting cloud services.
+        """
+        try:
+            import sounddevice as sd
+        except ImportError:
+            return False, "VOICE CORE: sounddevice fehlt in der MK90-Umgebung."
+        try:
+            device = sd.query_devices(kind="input")
+            if not device or int(device.get("max_input_channels", 0)) < 1:
+                return False, "VOICE CORE: Kein nutzbares Mikrofon ausgewählt."
+            sd.check_input_settings(channels=1, samplerate=16000, dtype="int16")
+            name = str(device.get("name", "Standardmikrofon"))
+            return True, f"VOICE CORE: Mikrofon bereit ({name[:90]}). Spracherkennung noch nicht getestet."
+        except Exception as exc:
+            return (
+                False,
+                f"VOICE CORE: Mikrofon nicht verfügbar ({type(exc).__name__}). "
+                "Prüfe Windows-Mikrofonzugriff, Standard-Eingabegerät und andere Apps, "
+                "die das Mikrofon verwenden.",
+            )
+
+    @staticmethod
     def _record_pcm_default(seconds: float, sample_rate: int) -> bytes:
         try:
             import sounddevice as sd
