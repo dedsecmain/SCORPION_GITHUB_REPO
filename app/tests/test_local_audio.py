@@ -186,3 +186,38 @@ def test_command_transcription_carries_high_german_prompt(tmp_path):
     source.write_bytes(b"x")
     assert audio.transcribe_command(source) == "öffne github"
     assert "Hochdeutscher Befehl" in captured["initial_prompt"]
+
+
+
+def test_voice_core_reports_usable_input_device(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    checks = []
+    fake = SimpleNamespace(
+        query_devices=lambda kind: {"name": "Microphone", "max_input_channels": 2},
+        check_input_settings=lambda **kwargs: checks.append(kwargs),
+    )
+    monkeypatch.setitem(sys.modules, "sounddevice", fake)
+    ok, status = LocalAudioService.microphone_status()
+    assert ok is True
+    assert "Microphone" in status
+    assert checks == [{"channels": 1, "samplerate": 16000, "dtype": "int16"}]
+
+
+def test_voice_core_reports_missing_microphone_without_crashing(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    def unavailable(**_kwargs):
+        raise OSError("device busy")
+
+    fake = SimpleNamespace(
+        query_devices=lambda kind: {"name": "Busy microphone", "max_input_channels": 1},
+        check_input_settings=unavailable,
+    )
+    monkeypatch.setitem(sys.modules, "sounddevice", fake)
+    ok, status = LocalAudioService.microphone_status()
+    assert ok is False
+    assert "Mikrofon" in status
+    assert "Windows" in status
