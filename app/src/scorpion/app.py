@@ -1728,10 +1728,13 @@ def run_app() -> None:
                     on_voice_state("SPEAKING")
                     spoken = controller.audio.speak(answer)
                     if spoken is False:
-                        root.after(0, lambda: append_chat(
-                            "SYSTEM", "VOICE CORE: Sprachausgabe nicht verfügbar. "
-                            "Prüfe Netzwerk für Edge-TTS oder lokale Windows-Stimmen."
-                        ))
+                        diagnostic = getattr(controller.audio, "last_tts_error", None)
+                        message = (
+                            "VOICE CORE: Sprachausgabe nicht verfügbar. "
+                            + (str(diagnostic)[:220] if diagnostic else
+                               "Prüfe Standardlautsprecher und Windows-Stimmen.")
+                        )
+                        root.after(0, lambda m=message: append_chat("SYSTEM", m))
             except Exception as exc:
                 root.after(0, lambda message=str(exc): append_chat(
                     "SYSTEM", "VOICE CORE: Wiedergabe fehlgeschlagen: " + message[:200]
@@ -1781,6 +1784,36 @@ def run_app() -> None:
                     lambda: on_voice_state("STANDBY")
                     if voice_runtime.get("state") == "ERROR" else None,
                 )
+
+        run_bg(work)
+
+    def on_voice_test() -> None:
+        """Test outgoing audio without calling Ollama or recording the mic."""
+        def work() -> None:
+            on_voice_state("SPEAKING")
+            try:
+                success = controller.audio.speak(
+                    "Guten Abend, Herr Rodriguez. Scorpion ist bereit."
+                )
+                engine = getattr(controller.audio, "last_tts_engine", None)
+                diagnostic = getattr(controller.audio, "last_tts_error", None)
+                if success:
+                    message = (
+                        "VOICE CORE: Testwiedergabe abgeschlossen über "
+                        + str(engine or "lokale Sprachausgabe")
+                        + ". Falls du nichts gehört hast, prüfe Windows-Audioausgabe "
+                        "und App-Lautstärke."
+                    )
+                else:
+                    message = (
+                        "VOICE CORE: Testwiedergabe fehlgeschlagen. "
+                        + str(diagnostic or "Windows-Lautsprecher oder Stimmen prüfen.")[:250]
+                    )
+            except Exception as exc:
+                message = f"VOICE CORE: Test fehlgeschlagen ({type(exc).__name__})."
+            finally:
+                on_voice_state("STANDBY")
+            root.after(0, lambda m=message: append_chat("SYSTEM", m))
 
         run_bg(work)
 
@@ -2015,6 +2048,7 @@ def run_app() -> None:
     add_nav("🖐  BUILD MODE", open_build_mode, accent=True)
     add_nav("◉  WAKE ON / OFF", toggle_wake)
     add_nav("🎙  LOCAL VOICE", on_mic)
+    add_nav("🔊  TEST VOICE", on_voice_test)
     add_nav("▣  SCREEN VISION", on_screen)
     add_nav("◌  CAMERA", on_camera)
     add_nav("↗  ASK CHATGPT", on_chatgpt)
